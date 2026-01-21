@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuro-Aim</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<div class="bg-grid"></div>
+
+<div id="menu-screen" class="screen active">
+    <div class="logo">
+        <h1 data-i18n="title">NEURO-AIM</h1>
+        <div class="version" data-i18n="version">7 MODES | ADAPTIVE DIFFICULTY</div>
+    </div>
+    
+    <div class="mode-selector"></div>
+    
+    <div class="menu-nav">
+        <a onclick="showScreen('stats-screen')" data-i18n="statistics">STATISTICS</a>
+        <a onclick="showSettings()" data-i18n="settings">SETTINGS</a>
+    </div>
+    
+    <div class="adaptive-info">
+        <span class="adaptive-icon">⚡</span>
+        <span data-i18n="adaptiveInfo">ADAPTIVE DIFFICULTY: Training auto-adjusts to your skill level (i+1 principle)</span>
+    </div>
+    
+    <div class="science-links" id="science-links">
+        <span class="science-title" data-i18n="scienceTitle">Scientific Foundations of Aiming</span>
+        <div class="science-link-row">
+            <a href="https://zhuanlan.zhihu.com/p/1994422110060315028" target="_blank" rel="noopener" class="science-link zh-link">
+                📖 中文
+            </a>
+            <a href="https://www.reddit.com/r/FPSAimTrainer/comments/1qd1nf5/a_scientific_analysis_of_fps_aiming/" target="_blank" rel="noopener" class="science-link en-link">
+                📖 English
+            </a>
+        </div>
+    </div>
+    
+    <div class="lang-indicator" id="btn-language" style="cursor: pointer;">🌐 中文/English</div>
+</div>
+
+<div class="info-modal hidden" id="info-modal">
+    <div class="info-content" id="info-content"></div>
+</div>
+
+<div class="settings-modal hidden" id="settings-modal">
+    <div class="settings-content">
+        <div class="settings-header">
+            <h2 data-i18n="settingsTitle">SETTINGS</h2>
+            <button class="settings-close-btn" onclick="closeSettings()">×</button>
+        </div>
+        
+        <!-- Audio Section -->
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="section-icon">🔊</span>
+                <h3 data-i18n="audio">AUDIO</h3>
+            </div>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <label data-i18n="soundEffects">Sound Effects</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="setting-soundEnabled" checked onchange="updateSetting('soundEnabled', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item full-width">
+                    <label data-i18n="volume">Volume</label>
+                    <div class="slider-group">
+                        <input type="range" class="styled-slider" id="setting-volume" min="0" max="1" step="0.05" value="0.5" oninput="updateVolume(this.value)">
+                        <span class="slider-value" id="volume-value">50%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Controls Section -->
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="section-icon">🎯</span>
+                <h3 data-i18n="mouse">CONTROLS</h3>
+            </div>
+            <div class="settings-grid">
+                <div class="setting-item full-width">
+                    <label><span data-i18n="sensitivity">Sensitivity</span> <span class="hint">(0.01 - 10.00)</span></label>
+                    <div class="sensitivity-group">
+                        <input type="range" class="styled-slider sens-slider" id="setting-sensitivity" min="0.01" max="10" step="0.01" value="1" oninput="updateSensitivity(this.value)">
+                        <input type="number" class="sens-input" id="sens-input" min="0.01" max="10" step="0.01" value="1.00" onchange="onSensitivityBlur(this)" oninput="onSensitivityInput(this.value)">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Crosshair Section -->
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="section-icon">✚</span>
+                <h3 data-i18n="crosshair">CROSSHAIR</h3>
+            </div>
+            <div class="crosshair-selector">
+                <div class="crosshair-option" data-ch="cross" onclick="setCrosshair('cross')" title="Cross">
+                    <svg width="24" height="24" viewBox="0 0 24 24"><line x1="12" y1="4" x2="12" y2="9" stroke="currentColor" stroke-width="2"/><line x1="12" y1="15" x2="12" y2="20" stroke="currentColor" stroke-width="2"/><line x1="4" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2"/><line x1="15" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2"/></svg>
+                </div>
+                <div class="crosshair-option" data-ch="dot" onclick="setCrosshair('dot')" title="Dot">
+                    <svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                </div>
+                <div class="crosshair-option" data-ch="circle" onclick="setCrosshair('circle')" title="Circle">
+                    <svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+                </div>
+                <div class="crosshair-option" data-ch="crossdot" onclick="setCrosshair('crossdot')" title="Small Cross">
+                    <svg width="24" height="24" viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18" stroke="currentColor" stroke-width="2"/><line x1="6" y1="12" x2="18" y2="12" stroke="currentColor" stroke-width="2"/></svg>
+                </div>
+            </div>
+            <div class="setting-item full-width">
+                <label data-i18n="scale">Scale</label>
+                <div class="slider-group">
+                    <input type="range" class="styled-slider" id="setting-scale" min="0.5" max="2" step="0.1" value="1" oninput="updateCrosshairScale(this.value)">
+                    <span class="slider-value" id="scale-value">1.0x</span>
+                </div>
+            </div>
+            <div class="crosshair-preview"><canvas id="crosshair-preview-canvas"></canvas></div>
+        </div>
+
+        <!-- Strobe Section -->
+        <div class="settings-section">
+            <div class="section-title">
+                <span class="section-icon">⚡</span>
+                <h3 data-i18n="strobeSettings">STROBE TRAINING</h3>
+                <div class="strobe-help">
+                    <span class="help-icon">?</span>
+                    <div class="help-tooltip">
+                        <p class="warning" data-i18n="strobeWarning">⚠️ WARNING: Do NOT enable if you have photosensitive epilepsy!</p>
+                        <p data-i18n="strobeTooltip">Recommended for Mode 2. By intermittently depriving vision, it forces the cerebellum to work under high load, greatly improving tracking training efficiency.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-desc" data-i18n="strobeDesc">Enable strobe effect to increase training difficulty</p>
+            <div class="strobe-grid">
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-1" onchange="toggleModeStrobe(1, this.checked)"><span>M1</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-2" onchange="toggleModeStrobe(2, this.checked)"><span>M2</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-3" onchange="toggleModeStrobe(3, this.checked)"><span>M3</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-4" onchange="toggleModeStrobe(4, this.checked)"><span>M4</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-5" onchange="toggleModeStrobe(5, this.checked)"><span>M5</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-6" onchange="toggleModeStrobe(6, this.checked)"><span>M6</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-7" onchange="toggleModeStrobe(7, this.checked)"><span>M7</span></label>
+                <label class="strobe-item"><input type="checkbox" id="strobe-mode-8" onchange="toggleModeStrobe(8, this.checked)"><span>M8</span></label>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="settings-actions">
+            <button class="btn-reset" onclick="resetSettings()" data-i18n="reset">RESET ALL</button>
+            <button class="btn-save" onclick="closeSettings()" data-i18n="saveClose">SAVE & CLOSE</button>
+        </div>
+    </div>
+</div>
+
+<div id="game-screen" class="screen">
+    <canvas id="game-canvas"></canvas>
+    <div class="game-hud" id="hud-container">
+        <div class="hud-item"><div class="label" data-i18n="time">TIME</div><div class="value time" id="hud-time">60</div></div>
+        <div class="hud-item"><div class="label" data-i18n="trials">TRIALS</div><div class="value trials" id="hud-trials">0</div></div>
+        <div class="hud-item"><div class="label" data-i18n="accuracy">ACCURACY</div><div class="value accuracy" id="hud-accuracy">--%</div></div>
+        <div class="hud-item"><div class="label" data-i18n="difficulty">DIFFICULTY</div><div class="value difficulty" id="hud-difficulty">30%</div></div>
+        <div class="hud-item"><div class="label">MODE</div><div class="value" id="hud-mode" style="font-size: 1rem;">-</div></div>
+        <div class="hud-item" id="hud-combo" style="display:none"><div class="label">COMBO</div><div class="value" style="color:#ffcc00">0x</div></div>
+    </div>
+    
+    <div class="escape-hint" data-i18n="escPause">[ESC] PAUSE</div>
+    
+    <div class="countdown-overlay" id="countdown-overlay">
+        <div class="click-prompt" id="click-prompt" data-i18n="clickToBegin">CLICK TO BEGIN</div>
+        <div class="countdown-text" id="countdown-text" style="display:none">3</div>
+    </div>
+    
+    <div class="pause-modal hidden" id="pause-modal">
+        <h2 data-i18n="paused">PAUSED</h2>
+        <div class="buttons">
+            <button id="btn-resume" onclick="resumeGame()" data-i18n="resume">RESUME</button>
+            <button class="danger" onclick="confirmQuit()" data-i18n="quit">QUIT</button>
+        </div>
+    </div>
+    
+    <div class="pause-modal hidden" id="quit-confirm">
+        <h2 data-i18n="confirmQuit">CONFIRM QUIT?</h2>
+        <div class="buttons">
+            <button onclick="cancelQuit()" data-i18n="cancel">CANCEL</button>
+            <button class="danger" onclick="quitGame()" data-i18n="quit">QUIT</button>
+        </div>
+    </div>
+</div>
+
+<div id="result-screen" class="screen">
+    <div class="result-header">
+        <h2 data-i18n="sessionComplete">SESSION COMPLETE</h2>
+        <div class="result-mode-info">
+            <span id="result-mode">Mode Name</span>
+            <span id="result-strobe" class="strobe-badge" data-i18n="normal">NORMAL</span>
+        </div>
+    </div>
+    <div class="result-main">
+        <div class="result-stat-big">
+            <div class="big-value" id="result-accuracy">0%</div>
+            <div class="big-label" data-i18n="accuracy">ACCURACY</div>
+        </div>
+        <div class="result-stat-big">
+            <div class="big-value" id="result-avgrt">0ms</div>
+            <div class="big-label" data-i18n="avgReaction">AVG REACTION</div>
+        </div>
+    </div>
+    <div class="result-stats">
+        <div class="result-stat">
+            <div class="val" id="result-trials">0/0</div>
+            <div class="lbl" data-i18n="hitsTrials">HITS / TRIALS</div>
+        </div>
+        <div class="result-stat difficulty-stat">
+            <div class="val" id="result-difficulty">30%</div>
+            <div class="diff-change" id="result-diff-change">+0%</div>
+            <div class="lbl" data-i18n="finalDifficulty">FINAL DIFFICULTY</div>
+        </div>
+        <div class="result-stat">
+            <div class="val" id="result-minrt">0ms</div>
+            <div class="lbl" data-i18n="bestRT">BEST RT</div>
+        </div>
+        <div class="result-stat">
+            <div class="val" id="result-maxrt">0ms</div>
+            <div class="lbl" data-i18n="worstRT">WORST RT</div>
+        </div>
+        <div class="result-stat">
+            <div class="val" id="result-consistency">±0ms</div>
+            <div class="lbl" data-i18n="consistency">CONSISTENCY</div>
+        </div>
+    </div>
+    <div class="result-actions">
+        <button onclick="showScreen('menu-screen')" data-i18n="menu">MENU</button>
+        <button class="primary" onclick="restartGame()" data-i18n="again">AGAIN</button>
+    </div>
+</div>
+
+<div id="stats-screen" class="screen">
+    <div class="stats-header">
+        <h2 data-i18n="statsTitle">TRAINING ANALYTICS</h2>
+        <button class="back-btn" onclick="showScreen('menu-screen')" data-i18n="back">← BACK</button>
+    </div>
+    </div>
+
+<div class="flash-overlay penalty" id="flash-penalty"></div>
+<div class="flash-overlay warn" id="flash-warn"></div>
+<div class="flash-text penalty" id="flash-text-penalty" data-i18n="invalid">INVALID</div>
+<div class="flash-text warn" id="flash-text-warn" data-i18n="missed">MISSED</div>
+
+<script src="js/config.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/storage.js"></script>
+
+<script src="js/core/audio.js"></script>
+<script src="js/systems/strobe.js"></script>
+<script src="js/core/renderer.js"></script>
+<script src="js/core/difficulty.js"></script>
+<script src="js/systems/stats.js"></script>
+<script src="js/core/input.js"></script>
+
+<script src="js/modes/_base.js"></script>
+<script src="js/modes/_registry.js"></script>
+<script src="js/modes/mode-gabor.js"></script>
+<script src="js/modes/mode-tracking.js"></script>
+<script src="js/modes/mode-nocrosshair.js"></script>
+<script src="js/modes/mode-landolt.js"></script>
+<script src="js/modes/mode-parafoveal.js"></script>
+<script src="js/modes/mode-memory.js"></script>
+<script src="js/modes/mode-cognitive.js"></script>
+<script src="js/modes/mode-horizontaltracking.js"></script>
+
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/modals.js"></script>
+<script src="js/ui/stats-view.js"></script>
+<script src="js/ui/settings.js"></script>
+
+<script src="js/core/engine.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
