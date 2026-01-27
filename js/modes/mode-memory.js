@@ -25,7 +25,8 @@ class MemorySequencerMode extends BaseMode {
             waitTimer: 1000,
             completeTimer: 0,
             resetTarget: null,
-            errorClickPos: null // 记录错误点击位置
+            errorClickPos: null, // Records error click position for visual feedback
+            lastClickTime: 0     // [ADDED] Timer for input debounce
         };
     }
     
@@ -38,39 +39,78 @@ class MemorySequencerMode extends BaseMode {
         else if (diff < 1.5) count = 3;
         else count = 4;
         
-        const params = this.constructor.PARAMS; // Use class params for raw access if needed, but helper exists
+        const params = this.constructor.PARAMS;
         const spread = this.param('spatialSpread');
         const size = this.param('targetSize');
         
         // Generate pool in world space
         const rangeX = 2000; 
         const rangeY = 1200;
-        const cx = (Math.random() - 0.5) * rangeX;
-        const cy = (Math.random() - 0.5) * rangeY;
         
-        const positionPool = [];
-        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
-            positionPool.push({ 
-                x: cx + Math.cos(angle) * spread, 
-                y: cy + Math.sin(angle) * spread, 
-                size: size 
-            });
+        let finalSequence = [];
+        let attempts = 0;
+        
+        // [FIX] Loop to ensure we get a valid sequence where ALL targets are outside the danger zone
+        // We need 'count' valid targets. If a batch fails, we retry with a new center.
+        while (finalSequence.length < count && attempts < 20) {
+            attempts++;
+            
+            // 1. Pick a random center for the cluster
+            const cx = (Math.random() - 0.5) * rangeX;
+            const cy = (Math.random() - 0.5) * rangeY;
+            
+            // 2. Generate candidate points around the center
+            const candidates = [];
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                const px = cx + Math.cos(angle) * spread;
+                const py = cy + Math.sin(angle) * spread;
+                
+                // [FIX] Crucial Check: Ensure target is far enough from center (0,0)
+                // The reset click zone is 160 radius. We use 200 to be safe.
+                if (Math.sqrt(px * px + py * py) > 200) {
+                    candidates.push({ 
+                        x: px, 
+                        y: py, 
+                        size: size 
+                    });
+                }
+            }
+            
+            // 3. Do we have enough valid candidates?
+            if (candidates.length >= count) {
+                // Shuffle candidates
+                for (let i = candidates.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+                }
+                
+                // Select the first 'count' items
+                finalSequence = candidates.slice(0, count).map((p, i) => ({
+                    x: p.x,
+                    y: p.y,
+                    z: WALL_DISTANCE,
+                    size: p.size,
+                    index: i
+                }));
+            }
+            // If not enough candidates, loop continues to try a new center position
         }
         
-        // Shuffle
-        for (let i = positionPool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [positionPool[i], positionPool[j]] = [positionPool[j], positionPool[i]];
+        // Fallback if random generation fails repeatedly (extremely rare)
+        if (finalSequence.length === 0) {
+            console.warn("[MemoryMode] Fallback sequence used");
+            for (let i = 0; i < count; i++) {
+                finalSequence.push({
+                    x: 600 + i * 150, // Safe position on the right
+                    y: 0,
+                    z: WALL_DISTANCE,
+                    size: size,
+                    index: i
+                });
+            }
         }
         
-        // Create sequence
-        this.state.sequence = positionPool.slice(0, count).map((p, i) => ({
-            x: p.x,
-            y: p.y,
-            z: WALL_DISTANCE,
-            size: p.size,
-            index: i
-        }));
+        this.state.sequence = finalSequence;
         
         // Reset counters
         this.state.displayIndex = 0;
@@ -98,7 +138,7 @@ class MemorySequencerMode extends BaseMode {
             return;
         }
         
-        // 错误反馈阶段 - 与complete使用相同时间
+        // Error Feedback Phase - Same duration as complete
         if (s.phase === 'error') {
             s.completeTimer -= dt;
             if (s.completeTimer <= 0) {
@@ -135,6 +175,11 @@ class MemorySequencerMode extends BaseMode {
     
     onClick(x, y) {
         const s = this.state;
+        const now = performance.now();
+
+        // [FIX] Debounce: Ignore clicks if too close to the previous one (< 100ms)
+        // This prevents double-clicks from registering as a hit on index N and immediate miss on index N+1
+        if (now - (s.lastClickTime || 0) < 100) return;
         
         // 1. Reset Phase: Click Center to Start Recall
         if (s.phase === 'reset_aim') {
@@ -144,19 +189,13 @@ class MemorySequencerMode extends BaseMode {
                 if (typeof playSound === 'function') playSound('click');
                 s.phase = 'recall';
                 s.currentIndex = 0;
+                s.lastClickTime = now;
             }
             return;
         }
         
         // 2. Recall Phase: Click Targets in Order
         if (s.phase !== 'recall') return;
-        
-        // Ignore clicks on center area (attention reset zone)
-        const centerRes = this.getDistanceFromCrosshair(0, 0, WALL_DISTANCE);
-        if (centerRes.dist <= 160) {
-            // Click on center is ignored - player is resetting attention
-            return;
-        }
         
         const target = s.sequence[s.currentIndex];
         if (!target) return;
@@ -165,9 +204,12 @@ class MemorySequencerMode extends BaseMode {
         const tolerance = this.param('positionTolerance');
         const hitRadius = Math.max(target.size, tolerance);
         
+        // [FIX] Check HIT condition FIRST.
+        // We must prioritize a valid target hit over the center "ignore" zone.
         if (res.dist <= hitRadius) {
             // Correct Hit
             s.currentIndex++;
+            s.lastClickTime = now; // Update timer
             if (typeof playSound === 'function') playSound('hit');
             
             // Sequence Complete
@@ -178,24 +220,35 @@ class MemorySequencerMode extends BaseMode {
                 s.phase = 'complete';
                 s.completeTimer = 500;
             }
-        } else {
-            // Miss / Wrong Order - 记录错误点击位置并进入错误显示阶段
-            this.engine.recordTrial(false);
-            if (this.engine.sessionStats) this.engine.sessionStats.sequenceErrors++;
-            flashEffect('penalty', this.flashText('wrongOrder')); // "WRONG ORDER"
-            if (typeof playSound === 'function') playSound('error');
-            
-            // 保存错误点击的屏幕位置用于显示
-            s.errorClickPos = { x: x, y: y };
-            s.phase = 'error';
-            s.completeTimer = 500; // 与成功相同的停留时间
+            return; // Exit here, do not check failure conditions
         }
+
+        // [FIX] Check Ignore Zone SECOND.
+        // If the player clicked near the center (Reset Zone) but NOT on a target, ignore it.
+        // This allows players to re-center their mouse without penalty if needed.
+        const centerRes = this.getDistanceFromCrosshair(0, 0, WALL_DISTANCE);
+        if (centerRes.dist <= 160) {
+            return;
+        }
+
+        // [FIX] Miss / Wrong Order
+        // If it wasn't a hit, and it wasn't in the safe zone, it's an error.
+        this.engine.recordTrial(false);
+        if (this.engine.sessionStats) this.engine.sessionStats.sequenceErrors++;
+        flashEffect('penalty', this.flashText('wrongOrder')); // "WRONG ORDER"
+        if (typeof playSound === 'function') playSound('error');
+        
+        // Save error position for rendering X mark
+        s.errorClickPos = { x: x, y: y };
+        s.phase = 'error';
+        s.completeTimer = 500; // Display error for same duration as success
+        s.lastClickTime = now;
     }
     
     draw(ctx) {
         const s = this.state;
         
-        // === COMPLETE FEEDBACK (成功 - 绿色) ===
+        // === COMPLETE FEEDBACK (Success - Green) ===
         if (s.phase === 'complete') {
             const seq = s.sequence;
             for (let i = 0; i < seq.length; i++) {
@@ -216,10 +269,10 @@ class MemorySequencerMode extends BaseMode {
             return;
         }
         
-        // === ERROR FEEDBACK (错误 - 红色) ===
+        // === ERROR FEEDBACK (Failure - Red) ===
         if (s.phase === 'error') {
             const seq = s.sequence;
-            // 显示所有目标位置（红色）
+            // Show all target positions (Red)
             for (let i = 0; i < seq.length; i++) {
                 const t = seq[i];
                 const p = this.project(t.x, t.y, t.z);
@@ -235,7 +288,7 @@ class MemorySequencerMode extends BaseMode {
                     ctx.fillText(i + 1, p.x, p.y);
                 }
             }
-            // 显示错误点击位置的X标记
+            // Show X mark at click position
             if (s.errorClickPos) {
                 const ex = s.errorClickPos.x;
                 const ey = s.errorClickPos.y;
