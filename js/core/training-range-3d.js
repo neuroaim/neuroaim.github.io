@@ -37,6 +37,7 @@ window.TrainingRange3D = class TrainingRange3D {
     this.latestShotImpact = null;
     this.transientFx = [];
     this.ruleLights = [];
+    this.ruleLightFixtures = [];
     this.labels = new Map();
     this.statusElement = document.getElementById('mode-status-text');
     this.modeId = 1;
@@ -116,6 +117,7 @@ window.TrainingRange3D = class TrainingRange3D {
     this._disposeGroup(this.rangeShell);
     this._disposeGroup(this.rangeLights);
     this.ruleLights = [];
+    this.ruleLightFixtures = [];
 
     const shell = new THREE.Group();
     shell.name = 'range-shell';
@@ -180,6 +182,7 @@ window.TrainingRange3D = class TrainingRange3D {
       const fixture = this._box([2.1, 0.12, 0.42], [0, 9.55, z], this._material(0xb9efff, 1.5, 0.25), shell);
       fixture.name = 'range-light-fixture';
       fixture.castShadow = false;
+      this.ruleLightFixtures.push(fixture);
     }
 
     this.scene.fog.density = 0.012 * Math.sqrt(30 / wallDistance);
@@ -623,7 +626,7 @@ window.TrainingRange3D = class TrainingRange3D {
     return object;
   }
 
-  _label(id, text, position, className = '') {
+  _label(id, text, position, className = '', color = null) {
     let record = this.labels.get(id);
     if (!record) {
       const element = document.createElement('div');
@@ -635,7 +638,23 @@ window.TrainingRange3D = class TrainingRange3D {
     }
     record.element.textContent = text;
     record.element.style.display = 'block';
+    if (color) record.element.style.setProperty('--label-color', color);
+    else record.element.style.removeProperty('--label-color');
     record.position.set(...position);
+  }
+
+  _setRuleLighting(color, intensity, fixtureColor = color, fixtureIntensity = 1.5) {
+    this.ruleLights.forEach(light => {
+      light.color.setHex(color);
+      light.intensity = intensity;
+    });
+    this.ruleLightFixtures.forEach(fixture => {
+      const material = fixture.material;
+      if (!material) return;
+      material.color?.setHex(fixtureColor);
+      material.emissive?.setHex(fixtureColor);
+      material.emissiveIntensity = fixtureIntensity;
+    });
   }
 
   _syncLabels() {
@@ -744,21 +763,31 @@ window.TrainingRange3D = class TrainingRange3D {
         this.show(`m6-${index}`, toWorld(target.x, target.y, target.z), Math.max(0.06, target.size / 57));
       });
       const warm = state.rule === 'warm';
-      const environmentColor = warm ? 0xff8a54 : 0x73c8ff;
-      this.scene.fog.color.setHex(warm ? 0x24120d : 0x071018);
-      this.ruleLights.forEach(light => {
-        light.color.setHex(environmentColor);
-        light.intensity = state.warningActive ? 1.7 + Math.sin(performance.now() * 0.012) * 0.45 : 1.15;
-      });
-      const ruleText = warm ? (i18n.current === 'zh' ? '射击绿色' : 'SHOOT GREEN') : (i18n.current === 'zh' ? '射击红色' : 'SHOOT RED');
-      this._label('m6-rule', ruleText, [0, 0.55, Math.min(12, this.rangeProfile.targetDistance * 0.5)], 'rule-label');
+      const targetColor = warm ? 0x44ff7c : 0xff3838;
+      const targetCssColor = warm ? '#44ff7c' : '#ff3838';
+      const pulse = state.warningActive ? Math.sin(performance.now() * 0.012) : 0;
+      this.scene.fog.color.setHex(0x071018);
+      this._setRuleLighting(
+        targetColor,
+        state.warningActive ? 1.7 + pulse * 0.45 : 1.15,
+        targetColor,
+        state.warningActive ? 1.9 + pulse * 0.35 : 1.5,
+      );
+      const ruleText = warm ? 'SHOOT GREEN' : 'SHOOT RED';
+      this._label(
+        'm6-rule',
+        ruleText,
+        [0, 6.85, this.rangeProfile.wallDistance - 0.24],
+        'rule-label',
+        targetCssColor,
+      );
       if (state.warningActive) {
         const seconds = Math.ceil(state.switchTimer / 1000);
         if (seconds > 0 && seconds <= 4) this._screenStatus(String(seconds), 'warning');
       }
     } else {
       this.scene.fog.color.setHex(0x071018);
-      this.ruleLights.forEach(light => { light.color.setHex(0x78cfff); light.intensity = 1.15; });
+      this._setRuleLighting(0x78cfff, 1.15, 0xb9efff, 1.5);
     }
 
     if (id === 7 && state.target) {
