@@ -91,7 +91,7 @@ class BaseMode {
      * @param {number} reactionTime - RT in milliseconds (optional, auto-calculated if not provided)
      */
     recordHit(reactionTime) {
-        const rt = reactionTime || (performance.now() - this.startTime);
+        const rt = reactionTime || (this.now() - this.startTime);
         this.engine.recordTrial(true, rt);
         playSound('hit');
     }
@@ -112,7 +112,7 @@ class BaseMode {
      * Start timing a new trial
      */
     startTrial() {
-        this.startTime = performance.now();
+        this.startTime = this.now();
     }
     
     /**
@@ -120,7 +120,11 @@ class BaseMode {
      * @returns {number} Milliseconds since trial start
      */
     getTrialTime() {
-        return performance.now() - this.startTime;
+        return this.now() - this.startTime;
+    }
+
+    now() {
+        return this.engine?.activeNow ? this.engine.activeNow() : performance.now();
     }
     
     /**

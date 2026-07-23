@@ -20,9 +20,9 @@ const Stats = {
         // Strobe multiplier
         const strobeMultiplier = session.strobe ? 1.2 : 1.0;
         
-        // Tracking time bonus (modes 2 and 5)
+        // Tracking time bonus (Mode 2 only)
         let trackingMultiplier = 1.0;
-        if ((session.mode === 2 || session.mode === 5) && session.trackingTime) {
+        if (session.mode === 2 && session.trackingTime) {
             trackingMultiplier = 1 + Math.min(0.5, session.trackingTime * 0.005);
         }
         
@@ -85,12 +85,24 @@ const Stats = {
             misses,
             trials,
             reactionTimes,
+            durationMs,
             sessionStats
         } = params;
         
         const calcStats = this.calculateSessionStats(reactionTimes, hits, trials);
         
+        const endedAt = Date.now();
+        const activeDurationMs = Number.isFinite(durationMs)
+            ? Math.max(0, Math.round(durationMs))
+            : Number.isFinite(sessionStats.durationMs)
+                ? Math.max(0, Math.round(sessionStats.durationMs))
+                : CFG.sessionDuration * 1000;
+        const sessionId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `session-${endedAt}-${Math.random().toString(36).slice(2, 10)}`;
         const session = {
+            sessionSchemaVersion: 5,
+            sessionId,
             mode: modeId,
             strobe: strobeEnabled,
             startDifficulty: startDifficulty,
@@ -104,22 +116,29 @@ const Stats = {
             hits: hits,
             misses: misses,
             trials: trials,
-            reactionTimes: reactionTimes.slice(0, 50), // Keep last 50
-            timestamp: Date.now(),
+            reactionTimes: reactionTimes.slice(-100),
+            reactionTimeCount: reactionTimes.length,
+            timestamp: endedAt,
+            startedAt: endedAt - activeDurationMs,
+            endedAt,
+            durationMs: activeDurationMs,
             
             // Mode-specific stats
             gazeBreaks: sessionStats.gazeBreaks || 0,
             perfectTrials: sessionStats.perfectTrials || 0,
-            sequenceErrors: sessionStats.sequenceErrors || 0,
             switchErrors: sessionStats.switchErrors || 0,
             inhibitionSuccess: sessionStats.inhibitionSuccess || 0,
             inhibitionFail: sessionStats.inhibitionFail || 0,
             trackingTime: sessionStats.trackingTime || 0,
-            difficultyHistory: sessionStats.difficultyHistory || []
+            difficultyHistory: Array.isArray(sessionStats.difficultyHistory)
+                ? sessionStats.difficultyHistory.slice()
+                : []
         };
+        if (modeId === 4 && sessionStats.targetLock) Object.assign(session, sessionStats.targetLock);
         
-        // Calculate NCS
-        session.ncs = this.calculateNCS(session);
+        // Target Lock scores direction accuracy and adaptive level, not answer
+        // speed or click throughput, so it is not folded into the NCS formula.
+        session.ncs = modeId === 4 ? 0 : this.calculateNCS(session);
         
         return session;
     },
@@ -229,7 +248,10 @@ const Stats = {
      */
     getTotalTime(sessions) {
         const sessionDuration = typeof CFG !== 'undefined' ? CFG.sessionDuration : 60;
-        const minutes = Math.round(sessions.length * sessionDuration / 60);
+        const totalSeconds = sessions.reduce((sum, session) => {
+            return sum + (Number.isFinite(session.durationMs) ? session.durationMs / 1000 : sessionDuration);
+        }, 0);
+        const minutes = Math.round(totalSeconds / 60);
         const hours = Math.floor(minutes / 60);
         
         return {

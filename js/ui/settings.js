@@ -33,12 +33,18 @@ function updateSettingsUI() {
     if (volEl) volEl.value = settings.volume;
     if (volVal) volVal.innerText = Math.round(settings.volume * 100) + '%';
     
-    // Sensitivity slider and input
+    // Game-specific hip-fire sensitivity, converted to one angular scale.
+    const profileId = settings.sensitivityGame || 'valorant';
+    const profileEl = document.getElementById('setting-sensitivity-game');
     const sensEl = document.getElementById('setting-sensitivity');
     const sensInput = document.getElementById('sens-input');
-    const sens = settings.sensitivity || 1.0;
+    const profile = getSensitivityProfile(profileId);
+    const sens = Number(settings.sensitivity) > 0 ? Number(settings.sensitivity) : 1;
+    if (profileEl) profileEl.value = profileId;
+    configureSensitivityInputs(profile);
     if (sensEl) sensEl.value = sens;
-    if (sensInput) sensInput.value = sens.toFixed(2);
+    if (sensInput) sensInput.value = formatSensitivity(sens, profile);
+    updateSensitivityReadout();
     
     // Crosshair scale slider
     const scaleEl = document.getElementById('setting-scale');
@@ -52,8 +58,8 @@ function updateSettingsUI() {
     });
     
     // Per-mode strobe toggles - 从 Storage 读取而不是 settings
-    const modeCount = ModeRegistry ? ModeRegistry.count() : 7;
-    for (let mode = 1; mode <= modeCount; mode++) {
+    const modeIds = [2, 7];
+    for (const mode of modeIds) {
         const strobeEl = document.getElementById(`strobe-mode-${mode}`);
         if (strobeEl) {
             // 直接从 Storage 读取，确保数据一致
@@ -67,12 +73,59 @@ function updateSetting(key, value) {
     saveSettings();
 }
 
+function formatSensitivity(value, profile = getSensitivityProfile(settings.sensitivityGame)) {
+    return Number(value).toFixed(profile.decimals ?? 2);
+}
+
+function clampSensitivity(value, profile = getSensitivityProfile(settings.sensitivityGame)) {
+    const parsed = Number(value);
+    const fallback = Number(settings.sensitivity) > 0 ? Number(settings.sensitivity) : 1;
+    return Math.max(profile.min, Math.min(profile.max, Number.isFinite(parsed) ? parsed : fallback));
+}
+
+function configureSensitivityInputs(profile = getSensitivityProfile(settings.sensitivityGame)) {
+    const sliderEl = document.getElementById('setting-sensitivity');
+    const inputEl = document.getElementById('sens-input');
+    const rangeEl = document.getElementById('sensitivity-range');
+    [sliderEl, inputEl].forEach(el => {
+        if (!el) return;
+        el.min = profile.min;
+        el.max = profile.max;
+        el.step = profile.step;
+    });
+    if (rangeEl) rangeEl.textContent = `(${profile.min} - ${profile.max})`;
+}
+
+function updateSensitivityReadout() {
+    const output = document.getElementById('sensitivity-equivalent');
+    if (output) {
+        const cs = convertSensitivity(settings.sensitivity, settings.sensitivityGame, 'cs2');
+        const valorant = convertSensitivity(settings.sensitivity, settings.sensitivityGame, 'valorant');
+        output.textContent = `CS ${cs.toFixed(6)} · VAL ${valorant.toFixed(6)}`;
+    }
+    const fovOutput = document.getElementById('trainer-fov-value');
+    if (fovOutput) {
+        const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+        const verticalRadians = CFG.camera.verticalFov * Math.PI / 180;
+        const horizontalFov = 2 * Math.atan(Math.tan(verticalRadians / 2) * aspect) * 180 / Math.PI;
+        fovOutput.textContent = `CS · ${horizontalFov.toFixed(2)}° H / ${CFG.camera.verticalFov.toFixed(2)}° V`;
+    }
+}
+
+function updateSensitivityGame(profileId) {
+    const previousId = settings.sensitivityGame || 'valorant';
+    const nextId = CFG.sensitivityProfiles[profileId] ? profileId : 'valorant';
+    const nextProfile = getSensitivityProfile(nextId);
+    const converted = convertSensitivity(settings.sensitivity, previousId, nextId);
+    settings.sensitivityGame = nextId;
+    settings.sensitivity = clampSensitivity(converted, nextProfile);
+    saveSettings();
+    updateSettingsUI();
+}
+
 function updateSensitivity(value) {
-    let sens = parseFloat(value);
-    // 限制范围 0.01 - 10.00
-    sens = Math.max(0.01, Math.min(10.00, sens));
-    // 保留两位小数
-    sens = Math.round(sens * 100) / 100;
+    const profile = getSensitivityProfile(settings.sensitivityGame);
+    const sens = clampSensitivity(value, profile);
     
     settings.sensitivity = sens;
     
@@ -81,31 +134,32 @@ function updateSensitivity(value) {
     const inputEl = document.getElementById('sens-input');
     
     if (sliderEl) sliderEl.value = sens;
-    if (inputEl) inputEl.value = sens.toFixed(2);
-    
+    if (inputEl) inputEl.value = formatSensitivity(sens, profile);
+    updateSensitivityReadout();
     saveSettings();
 }
 
 // 处理灵敏度输入框的输入
 function onSensitivityInput(value) {
-    let sens = parseFloat(value);
-    if (isNaN(sens)) return;
-    sens = Math.max(0.01, Math.min(10.00, sens));
+    const profile = getSensitivityProfile(settings.sensitivityGame);
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    const sens = clampSensitivity(parsed, profile);
     
     // 只更新滑块，不碰输入框
     const sliderEl = document.getElementById('setting-sensitivity');
     if (sliderEl) sliderEl.value = sens;
     
     settings.sensitivity = sens;
+    updateSensitivityReadout();
     saveSettings();
 }
 
 // 处理灵敏度输入框失去焦点时的校验
 function onSensitivityBlur(el) {
-    let sens = parseFloat(el.value) || 1.0;
-    sens = Math.max(0.01, Math.min(10.00, sens));
-    sens = Math.round(sens * 100) / 100;
-    el.value = sens.toFixed(2);
+    const profile = getSensitivityProfile(settings.sensitivityGame);
+    const sens = clampSensitivity(el.value, profile);
+    el.value = formatSensitivity(sens, profile);
     updateSensitivity(sens);
 }
 
@@ -208,6 +262,7 @@ function drawCrosshairAt(ctx, x, y, style, scale) {
 
 // ===== STROBE TOGGLE =====
 function toggleStrobe(mode, enabled) {
+    if (mode !== 2 && mode !== 7) return;
     if (!settings.strobeEnabled) settings.strobeEnabled = {};
     settings.strobeEnabled[mode] = enabled;
     saveSettings();
@@ -220,6 +275,7 @@ function toggleStrobe(mode, enabled) {
 
 // 用于HTML中的onchange调用
 function toggleModeStrobe(mode, enabled) {
+    if (mode !== 2 && mode !== 7) return;
     Storage.setStrobeEnabled(mode, enabled);
     
     // 同步更新settings对象
@@ -250,7 +306,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         loadSettings, saveSettings, resetSettings,
         updateSettingsUI, updateSetting,
-        updateSensitivity, updateVolume,
+        updateSensitivity, updateSensitivityGame, updateVolume,
         setCrosshair, updateCrosshairScale,
         updateCrosshairPreview, drawCrosshairAt,
         toggleStrobe, getDifficultyLevel, setDifficultyLevel, isStrobeEnabled

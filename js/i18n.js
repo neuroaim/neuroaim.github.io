@@ -9,7 +9,7 @@ const i18n = {
             // Menu Screen
             title: 'NEURO-AIM',
             subtitle: 'Neural-Optimized FPS Aiming Trainer',
-            version: '8 MODES | ADAPTIVE DIFFICULTY',
+            version: '7 MODES | ADAPTIVE DIFFICULTY',
             statistics: 'STATISTICS',
             trainingGuide: 'TRAINING GUIDE',
             settings: 'SETTINGS',
@@ -19,7 +19,7 @@ const i18n = {
             // Mode Names
             mode1Name: 'GABOR SCOUT',
             mode1Tag: 'V1 CORTEX + PERCEPTION',
-            mode1Desc: 'Identify <strong>Vertical</strong> targets in noise.',
+            mode1Desc: 'Identify the <strong>vertical-striped ball</strong> in the target array.',
             
             mode2Name: 'PURE TRACKING',
             mode2Tag: 'CEREBELLUM + PREDICTION',
@@ -29,25 +29,21 @@ const i18n = {
             mode3Tag: 'PREMOTOR + INHIBITION',
             mode3Desc: 'Reduce your visual dependency, train your mouse-screen spatial awareness.',
             
-            mode4Name: 'LANDOLT SACCADE',
-            mode4Tag: 'DISCRIMINATION + VISUOMOTOR',
-            mode4Desc: 'Aim at target → Press <strong>WASD</strong> for gap direction.',
+            mode4Name: 'TARGET LOCK',
+            mode4Tag: 'VISUAL LOCK + DIRECTION',
+            mode4Desc: 'Keep your eyes on the flashing center point, then identify whether the opening on the target\'s head faces <strong>left or right</strong>.',
             
-            mode5Name: 'PARAFOVEAL GHOST',
-            mode5Tag: 'PPC + COVERT ATTENTION',
-            mode5Desc: 'Track center. Shoot <strong>blue</strong> ghosts. Ignore <strong>red</strong>.',
+            mode5Name: 'PERIPHERAL POP',
+            mode5Tag: 'FOV ACQUISITION + REACTION',
+            mode5Desc: 'Shoot each ball before it vanishes inside the <strong>30° acquisition cone</strong>.',
             
-            mode6Name: 'MEMORY SEQUENCER',
-            mode6Tag: 'dlPFC + SPATIAL MEMORY',
-            mode6Desc: 'Memorize <strong>sequence</strong>. Shoot positions in order.',
-            
-            mode7Name: 'COGNITIVE SWITCH',
-            mode7Tag: 'ACC + RULE FLEXIBILITY',
-            mode7Desc: 'Rules change with <strong>environment</strong>. Adapt instantly.',
+            mode6Name: 'COGNITIVE SWITCH',
+            mode6Tag: 'ACC + RULE FLEXIBILITY',
+            mode6Desc: 'Rules change with <strong>environment</strong>. Adapt instantly.',
 
-            mode8Name: 'HORIZONTAL TRACKING',
-            mode8Tag: 'CEREBELLUM + PREDICTION',
-            mode8Desc: 'Track a <strong>bar target</strong> moving smoothly left and right.',
+            mode7Name: 'HORIZONTAL TRACKING',
+            mode7Tag: 'CEREBELLUM + PREDICTION',
+            mode7Desc: 'Track a <strong>training dummy</strong> moving smoothly left and right.',
             
             // HUD
             time: 'TIME',
@@ -112,6 +108,11 @@ const i18n = {
             strobeTooltip: 'Recommended for Mode 2. By intermittently depriving vision, it forces the cerebellum to work under high load, greatly improving tracking training efficiency.',
             mouse: 'CONTROLS',
             sensitivity: 'Sensitivity',
+            gameProfile: 'Game profile',
+            trainerFov: 'Trainer FOV',
+            hipfireMatch: 'Hip-fire 360° match',
+            adsNote: 'ADS/zoom multipliers are not applied.',
+            rawInputNote: 'Raw mouse input is requested when the browser supports it.',
             audio: 'AUDIO',
             soundEffects: 'Sound Effects',
             volume: 'Volume',
@@ -164,7 +165,7 @@ const i18n = {
             // Menu Screen
             title: 'Neuro-Aim',
             subtitle: '神经科学优化的FPS瞄准训练器',
-            version: '8种模式 | 自适应难度',
+            version: '7种模式 | 自适应难度',
             statistics: '统计数据',
             trainingGuide: '训练指南',
             settings: '设置',
@@ -174,7 +175,7 @@ const i18n = {
             // Mode Names
             mode1Name: 'GABOR侦察',
             mode1Tag: 'V1视皮层 + 感知',
-            mode1Desc: '识别噪声中的<strong>竖向</strong>目标。',
+            mode1Desc: '在目标阵列中识别带<strong>竖条纹的训练球</strong>。',
             
             mode2Name: '纯粹追踪',
             mode2Tag: '小脑 + 预测',
@@ -184,25 +185,21 @@ const i18n = {
             mode3Tag: '前运动皮层 + 抑制',
             mode3Desc: '减少你的视觉依赖，训练你的鼠标-屏幕感知能力。',
             
-            mode4Name: 'LANDOLT扫视',
-            mode4Tag: '辨别 + 视觉运动',
-            mode4Desc: '瞄准目标 → 按<strong>WASD</strong>指示缺口方向。',
+            mode4Name: '目标锁定',
+            mode4Tag: '视觉锁定 + 方向辨认',
+            mode4Desc: '盯住中央闪烁点，目标出现后辨认其头部缺口环<strong>朝左还是朝右</strong>。',
             
-            mode5Name: '副中央幽灵',
-            mode5Tag: 'PPC + 隐蔽注意',
-            mode5Desc: '追踪中心。射击<strong>蓝色</strong>幽灵。忽略<strong>红色</strong>。',
+            mode5Name: '周边闪击',
+            mode5Tag: '视野捕获 + 反应',
+            mode5Desc: '在球消失前击中它；所有目标都位于<strong>总宽 30° 的捕获锥</strong>内。',
             
-            mode6Name: '记忆序列',
-            mode6Tag: 'dlPFC + 空间记忆',
-            mode6Desc: '记住<strong>序列</strong>。按顺序射击位置。',
-            
-            mode7Name: '认知切换',
-            mode7Tag: 'ACC + 规则灵活性',
-            mode7Desc: '规则随<strong>环境</strong>变化。立即适应。',
+            mode6Name: '认知切换',
+            mode6Tag: 'ACC + 规则灵活性',
+            mode6Desc: '规则随<strong>环境</strong>变化。立即适应。',
 
-            mode8Name: '水平追踪',
-            mode8Tag: '小脑 + 预测',
-            mode8Desc: '追踪一个<strong>条形目标</strong>，左右平滑移动。',
+            mode7Name: '水平追踪',
+            mode7Tag: '小脑 + 预测',
+            mode7Desc: '追踪一个左右平滑移动的<strong>训练假人</strong>。',
             
             // HUD
             time: '时间',
@@ -267,6 +264,11 @@ const i18n = {
             strobeTooltip: '推荐用于模式2。通过间歇性剥夺视觉，迫使小脑在高负荷下工作，大大提高追踪训练效率。',
             mouse: '控制',
             sensitivity: '灵敏度',
+            gameProfile: '游戏配置',
+            trainerFov: '训练器视野',
+            hipfireMatch: '腰射 360° 等效',
+            adsNote: '不套用开镜或缩放倍率。',
+            rawInputNote: '浏览器支持时会请求原始鼠标输入。',
             audio: '音频',
             soundEffects: '音效',
             volume: '音量',

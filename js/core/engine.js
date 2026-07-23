@@ -3,7 +3,7 @@
 // MERGED: User's Exact Logic + Click-to-Start Feature + Bullet Holes
 
 // ===== GLOBAL STATE =====
-var canvas, ctx;
+var canvas;
 var canvasWidth = window.innerWidth;
 var canvasHeight = window.innerHeight;
 var mouseX = 0;
@@ -16,12 +16,14 @@ var rawMouseY = window.innerHeight / 2;
 // ===== BULLET HOLE SYSTEM =====
 const BulletHoles = {
     holes: [],
+    nextId: 1,
     maxHoles: 5,
     duration: 1500, // 1.5 seconds
     
     // Add a new bullet hole at world position
     add(worldX, worldY, worldZ) {
         this.holes.push({
+            id: this.nextId++,
             x: worldX,
             y: worldY,
             z: worldZ || WALL_DISTANCE,
@@ -160,16 +162,34 @@ const GameEngine = {
     gameStartTime: 0,
     lastFrameTime: 0,
     gameTime: 0,
+    totalPausedMs: 0,
+    pauseStartedAt: 0,
     
     // Mouse position (for mode access)
     get mouseX() { return mouseX; },
     get mouseY() { return mouseY; },
+
+    activeNow() {
+        const now = performance.now();
+        const currentPause = this.pauseStartedAt ? now - this.pauseStartedAt : 0;
+        return now - this.totalPausedMs - currentPause;
+    },
+
+    pauseClock() {
+        if (!this.pauseStartedAt) this.pauseStartedAt = performance.now();
+    },
+
+    resumeClock() {
+        if (!this.pauseStartedAt) return;
+        this.totalPausedMs += performance.now() - this.pauseStartedAt;
+        this.pauseStartedAt = 0;
+    },
     
     // ===== INITIALIZATION =====
     
     init() {
         canvas = document.getElementById('game-canvas');
-        ctx = canvas.getContext('2d');
+        this.range = new TrainingRange3D(canvas);
         
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -178,6 +198,7 @@ const GameEngine = {
         mouseX = 0;
         mouseY = 0;
         mouseInputAccumulator = { x: 0, y: 0 };
+        if (this.range) this.range.setLook(0, 0);
 
         rawMouseX = canvasWidth / 2;
         rawMouseY = canvasHeight / 2;
@@ -186,16 +207,23 @@ const GameEngine = {
         document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        document.addEventListener('pointerlockchange', () => this.handlePointerLockChange());
+        document.addEventListener('pointerlockerror', () => {
+            if (this.phase !== 'resuming') return;
+            this.phase = 'paused';
+            if (typeof Modals !== 'undefined') Modals.showPause();
+        });
         
         // Click Listener - For Click-to-Start logic
         canvas.addEventListener('click', () => {
             // Case 1: Waiting for start click (pointer lock already active)
             if (this.phase === 'countdown' && this.waitingForStart) {
-                this.triggerCountdownTimer();
+                if (document.pointerLockElement === canvas) this.triggerCountdownTimer();
+                else requestAimPointerLock(canvas);
             } 
             // Case 2: Already playing but lost lock (re-lock)
             else if (this.phase === 'playing' && document.pointerLockElement !== canvas) {
-                canvas.requestPointerLock();
+                requestAimPointerLock(canvas);
             }
         });
         
@@ -209,6 +237,10 @@ const GameEngine = {
         window.canvasHeight = canvasHeight = window.innerHeight;
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
+        if (this.range) {
+            this.range.resize();
+            this.range.setModeProfile(this.modeId);
+        }
         
         if (typeof NoiseSystem !== 'undefined') {
             NoiseSystem.init(canvasWidth, canvasHeight);
@@ -218,10 +250,13 @@ const GameEngine = {
     // ===== GAME CONTROL =====
     
     startGame(modeId) {
+        if (this.mode?.cleanup) this.mode.cleanup();
+        if (this.range) this.range.clearTargets();
         // Reset camera at the start of a new game
         mouseX = 0;
         mouseY = 0;
         mouseInputAccumulator = { x: 0, y: 0 };
+        if (this.range) this.range.setLook(0, 0);
         
         // Reset crosshair opacity
         crosshairOpacity = 1.0;
@@ -232,8 +267,16 @@ const GameEngine = {
         if (typeof showScreen === 'function') showScreen('game-screen');
         
         this.modeId = modeId;
-        this.strobeEnabled = Storage.isStrobeEnabled(modeId);
+        if (this.range) this.range.setModeProfile(modeId);
+        this.strobeEnabled = [2, 7].includes(modeId) && Storage.isStrobeEnabled(modeId);
         this.difficulty = Storage.getDifficultyLevel(modeId, this.strobeEnabled);
+        const lockInstructions = document.getElementById('target-lock-instructions');
+        if (lockInstructions) {
+            lockInstructions.style.display = modeId === 4 ? 'block' : 'none';
+            lockInstructions.textContent = i18n.current === 'zh'
+                ? '头部缺口向左：左键　　头部缺口向右：右键　　回答速度不计分'
+                : 'HEAD GAP LEFT: LEFT CLICK　　HEAD GAP RIGHT: RIGHT CLICK　　RESPONSE SPEED IS NOT SCORED';
+        }
         
         // Reset session
         this.hits = 0;
@@ -249,12 +292,13 @@ const GameEngine = {
             startDifficulty: this.difficulty,
             gazeBreaks: 0,
             perfectTrials: 0,
-            sequenceErrors: 0,
             switchErrors: 0,
             inhibitionSuccess: 0,
             inhibitionFail: 0,
             difficultyHistory: []
         };
+        this.totalPausedMs = 0;
+        this.pauseStartedAt = 0;
         
         if (typeof Combo !== 'undefined') Combo.reset();
         this.setupNoiseForMode(modeId);
@@ -285,7 +329,7 @@ const GameEngine = {
         if (canvas) {
             canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
             if (typeof canvas.requestPointerLock === 'function') {
-                canvas.requestPointerLock();
+                requestAimPointerLock(canvas);
             }
         }
         
@@ -336,6 +380,7 @@ const GameEngine = {
     
     // MODIFIED: Adapted to be called by triggerCountdownTimer
     startCountdown(seconds, callback) {
+        if (this.countdownTimer) clearInterval(this.countdownTimer);
         let count = seconds;
         const overlay = document.getElementById('countdown-overlay');
         const countText = document.getElementById('countdown-text');
@@ -348,25 +393,62 @@ const GameEngine = {
         
         playSound('click');
         
-        const timer = setInterval(() => {
+        this.countdownTimer = setInterval(() => {
             count--;
             if (count > 0) {
                 if (countText) countText.innerText = count;
                 playSound('click');
             } else {
-                clearInterval(timer);
+                clearInterval(this.countdownTimer);
+                this.countdownTimer = null;
                 if (overlay) overlay.style.display = 'none';
                 if (callback) callback();
             }
         }, 1000);
     },
+
+    cancelCountdown() {
+        if (this.countdownTimer) clearInterval(this.countdownTimer);
+        this.countdownTimer = null;
+        this.waitingForStart = true;
+        this.showClickPrompt();
+    },
+
+    handlePointerLockChange() {
+        if (document.pointerLockElement === canvas) {
+            if (this.phase === 'resuming') {
+                this.resumeClock();
+                this.phase = 'playing';
+                if (this.mode?.resume) this.mode.resume();
+            }
+            return;
+        }
+        mouseInputAccumulator = { x: 0, y: 0 };
+        if (this.phase === 'countdown') {
+            this.cancelCountdown();
+        } else if (this.phase === 'playing') {
+            if (this.modeId === 4 && this.mode?.interrupt) this.mode.interrupt('pointer_lock_lost');
+            if (typeof togglePause === 'function') togglePause();
+        }
+    },
+
+    requestResume() {
+        if (document.pointerLockElement === canvas) {
+            this.resumeClock();
+            this.phase = 'playing';
+            if (this.mode?.resume) this.mode.resume();
+            return;
+        }
+        this.phase = 'resuming';
+        requestAimPointerLock(canvas);
+    },
     
     endGame() {
+        this.phase = 'ended';
+        if (this.mode?.finalizeSession) this.mode.finalizeSession();
         if (document.exitPointerLock) {
             document.exitPointerLock();
         }
-        
-        this.phase = 'ended';
         
         // Save difficulty
         Storage.setDifficultyLevel(this.modeId, this.strobeEnabled, this.difficulty);
@@ -381,6 +463,7 @@ const GameEngine = {
             misses: this.misses,
             trials: this.trials,
             reactionTimes: this.reactionTimes,
+            durationMs: this.gameTime,
             sessionStats: this.sessionStats
         });
         
@@ -401,7 +484,7 @@ const GameEngine = {
     
     // ===== ADAPTIVE DIFFICULTY =====
     
-    recordTrial(success, reactionTime) {
+    recordTrial(success, reactionTime, options = {}) {
         this.trials++;
         if (success) { this.hits++; if (reactionTime) this.reactionTimes.push(reactionTime); }
         else this.misses++;
@@ -412,19 +495,18 @@ const GameEngine = {
             this.recentResults.shift();
         }
         
-        // Update streak counters
-        if (success) {
-            this.consecutiveSuccess++;
-            this.consecutiveFail = 0;
-        } else {
-            this.consecutiveFail++;
-            this.consecutiveSuccess = 0;
+        if (!options.skipDifficulty) {
+            if (success) {
+                this.consecutiveSuccess++;
+                this.consecutiveFail = 0;
+            } else {
+                this.consecutiveFail++;
+                this.consecutiveSuccess = 0;
+            }
+            if (!this.sessionStats.difficultyHistory) this.sessionStats.difficultyHistory = [];
+            this.sessionStats.difficultyHistory.push(this.difficulty);
+            this.adjustDifficulty();
         }
-        
-        if (!this.sessionStats.difficultyHistory) this.sessionStats.difficultyHistory = [];
-        this.sessionStats.difficultyHistory.push(this.difficulty);
-        
-        this.adjustDifficulty();
         this.updateHUD();
     },
     
@@ -448,10 +530,10 @@ const GameEngine = {
         // This allows pre-aiming during countdown
         if (document.pointerLockElement === canvas && (this.phase === 'countdown' || this.phase === 'playing')) {
             const settings = Storage.getSettings();
-            const sens = settings.sensitivity || 1.0;
+            const sens = getSensitivityMultiplier(settings);
             
             // Basic jump filter to prevent browser glitches
-            if (Math.abs(mouseInputAccumulator.x) < 300 && Math.abs(mouseInputAccumulator.y) < 300) {
+            if (this.modeId !== 4 && Math.abs(mouseInputAccumulator.x) < 300 && Math.abs(mouseInputAccumulator.y) < 300) {
                  mouseX += mouseInputAccumulator.x * sens;
                  mouseY += mouseInputAccumulator.y * sens;
             }
@@ -462,6 +544,7 @@ const GameEngine = {
         if (!this.lastFrameTime) this.lastFrameTime = timestamp;
         let dt = timestamp - this.lastFrameTime;
         this.lastFrameTime = timestamp;
+        if (dt > 100 && this.modeId === 4 && this.mode?.interrupt) this.mode.interrupt('long_frame');
         if (dt > 100) dt = 16.67;
         
         // Update game state
@@ -505,62 +588,31 @@ const GameEngine = {
     },
     
     render() {
-        ctx.fillStyle = '#000000ff';
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        
-        // Allow rendering during 'countdown' so user sees the "waiting" screen correctly
-        if (this.phase === 'playing' || this.phase === 'paused' || this.phase === 'countdown') {
-            // Mode 7 Glow Logic (Restored)
-            let wallColor = undefined;
-            let wallBlur = 0;
-            
-            if (this.modeId === 7 && this.mode && this.mode.state) {
-                const isWarm = this.mode.state.rule === 'warm';
-                const baseColor = isWarm ? '#ff8844' : '#4488ff';
-                
-                if (this.mode.state.warningActive) {
-                    const pulse = Math.sin(this.gameTime * 0.02) * 0.5 + 0.5;
-                    wallBlur = 20 + pulse * 30;
-                    wallColor = baseColor;
-                } else {
-                    wallColor = 'rgba(0, 217, 255, 0.15)';
-                }
-            }
-            
-            drawWallGrid(ctx, mouseX, mouseY, wallColor, wallBlur);
-            
-            // Draw bullet holes BEFORE mode content (so they appear behind targets)
-            BulletHoles.draw(ctx, mouseX, mouseY);
-            
-            if (this.mode) this.mode.draw(ctx);
-            
-            if (this.modeId === 1 && typeof NoiseSystem !== 'undefined') NoiseSystem.draw(ctx);
-            
-            if (this.strobeEnabled && this.isBlindPhase) {
-                // Ensure strobe blackout doesn't happen during countdown text
-                if (this.phase === 'playing') {
-                    ctx.fillStyle = '#000000';
-                    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-                }
-            }
-            
-            // Countdown overlay (semi-transparent color mask)
-            if (this.phase === 'countdown') {
-                ctx.fillStyle = 'rgba(0, 10, 20, 0.5)';
-                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            }
+        const gameScreen = document.getElementById('game-screen');
+        if (!gameScreen?.classList.contains('active')) return;
+        const renderNow = performance.now();
+        if (this.phase === 'paused' && renderNow - (this.lastPausedRenderAt || 0) < 100) return;
+        if (this.phase === 'paused') this.lastPausedRenderAt = renderNow;
+        const strobeCurtain = document.getElementById('strobe-curtain');
+        if (strobeCurtain) {
+            strobeCurtain.classList.toggle('blind', this.phase === 'playing' && this.strobeEnabled && this.isBlindPhase);
         }
-        
-        const isBlind = this.strobeEnabled && this.isBlindPhase;
-    
-        // 频闪黑屏时不绘制准星
-        if (!isBlind) {
-            // Pass crosshair opacity to the draw function
-            drawCrosshair(ctx, canvasWidth / 2, canvasHeight / 2, crosshairOpacity);
+        if (this.range) {
+            this.range.setLook(mouseX * SENS_FACTOR, mouseY * SENS_FACTOR);
+            const reticleVisible = this.modeId !== 4 && !(this.strobeEnabled && this.isBlindPhase);
+            const settings = Storage.getSettings();
+            this.range.setReticle(reticleVisible, crosshairOpacity, settings.crosshair || 'cross', settings.crosshairScale || 1);
+            if (this.mode) this.mode.draw(); // draw is now a Three.js state sync, never Canvas2D painting.
+            this.range.syncBulletHoles(BulletHoles.holes);
+            this.range.render(renderNow);
         }
     },
     
     updateHUD() {
+        if (this.modeId === 4 && this.mode?.updateHud) {
+            this.mode.updateHud();
+            return;
+        }
         const timeEl = document.getElementById('hud-time');
         if (timeEl) timeEl.innerText = Math.max(0, Math.ceil(this.timeLeft));
         
@@ -573,14 +625,30 @@ const GameEngine = {
         
         const trialsEl = document.getElementById('hud-trials');
         if (trialsEl) trialsEl.innerText = this.trials;
+
+        const modeEl = document.getElementById('hud-mode');
+        if (modeEl) modeEl.innerText = i18n.modeName(this.modeId);
+
+        const labels = {
+            'hud-time': i18n.t('time'),
+            'hud-trials': i18n.t('trials'),
+            'hud-accuracy': i18n.t('accuracy'),
+            'hud-difficulty': i18n.t('difficulty'),
+        };
+        Object.entries(labels).forEach(([id, value]) => {
+            const label = document.getElementById(id)?.previousElementSibling;
+            if (label) label.textContent = value;
+        });
     },
     
     // ===== INPUT HANDLERS =====
     
     handleMouseMove(e) {
         if (document.pointerLockElement === canvas) {
-            mouseInputAccumulator.x += e.movementX;
-            mouseInputAccumulator.y += e.movementY;
+            if (this.modeId !== 4) {
+                mouseInputAccumulator.x += e.movementX;
+                mouseInputAccumulator.y += e.movementY;
+            }
         }
         else {
             rawMouseX = e.clientX;
@@ -590,10 +658,16 @@ const GameEngine = {
     
     handleMouseDown(e) {
         if (this.phase === 'playing' && this.mode) {
+            if (document.pointerLockElement !== canvas) {
+                e.preventDefault();
+                requestAimPointerLock(canvas);
+                return;
+            }
             // Add bullet hole on every click
-            BulletHoles.addFromCrosshair(mouseX, mouseY);
+            if (this.modeId !== 3 && this.modeId !== 4) BulletHoles.addFromCrosshair(mouseX, mouseY);
             
-            this.mode.onClick(e.clientX, e.clientY);
+            if (e.button === 2) e.preventDefault();
+            this.mode.onClick(e.clientX, e.clientY, e.button);
         }
     },
     
@@ -601,6 +675,13 @@ const GameEngine = {
         if (this.phase === 'playing' && this.mode) this.mode.onKeyDown(e.code);
     }
 };
+
+document.addEventListener('contextmenu', (e) => { if (GameEngine.phase === 'playing') e.preventDefault(); });
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && GameEngine.modeId === 4 && GameEngine.mode?.interrupt) {
+        GameEngine.mode.interrupt('page_hidden');
+    }
+});
 
 // ===== GLOBAL HELPERS FOR BACKWARD COMPATIBILITY =====
 

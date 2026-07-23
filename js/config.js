@@ -11,11 +11,41 @@ const CFG = {
         width: 3000,
         height: 2000
     },
+
+    // Compact FPS practice-room layout (metres). Each mode constrains its own
+    // spawn envelope so targets remain inside these ordinary room walls.
+    rangeProfiles: {
+        1: { targetDistance: 12, wallDistance: 13.5, roomWidth: 16 }, // Near Gabor wall
+        2: { targetDistance: 15, wallDistance: 20, roomWidth: 24 }, // Tracking lane
+        3: { targetDistance: 13.5, wallDistance: 14, roomWidth: 20 }, // Near-wall precision lane
+        4: { targetDistance: 14, wallDistance: 19, roomWidth: 42 }, // Peripheral protocol exception
+        5: { targetDistance: 11, wallDistance: 16, roomWidth: 20 }, // Peripheral room
+        6: { targetDistance: 13, wallDistance: 18, roomWidth: 22 }, // Switch lane
+        7: { targetDistance: 17, wallDistance: 22, roomWidth: 26 }  // Dummy lane
+    },
     
-    // Mouse sensitivity factor
-    // 0.001222 matches Valorant sensitivity (yaw 0.07)
-    // Your in-game sens = 1.0 will feel like Valorant sens = 1.0
-    sensitivityFactor: 0.001222,
+    // Camera calibration. Counter-Strike exposes a 90 degree horizontal view
+    // on a 4:3 reference viewport. Hor+ expansion makes that 106.26 degrees
+    // horizontally (73.74 vertically) at the trainer's 16:9 reference aspect.
+    camera: {
+        verticalFov: 73.73979529168804,
+        referenceAspect: 16 / 9,
+        referenceHorizontalFov: 106.26020470831196
+    },
+
+    // Hip-fire degrees turned per raw mouse count at sensitivity 1.
+    sensitivityProfiles: {
+        cs2:          { label: 'Counter-Strike 2',  yaw: 0.022,        min: 0.01, max: 10,  step: 0.000001, decimals: 6 },
+        valorant:     { label: 'Valorant',          yaw: 0.07,         min: 0.01, max: 10,  step: 0.000001, decimals: 6 },
+        cod:          { label: 'Call of Duty / Warzone', yaw: 0.0066,  min: 0.01, max: 100, step: 0.000001, decimals: 6 },
+        overwatch:    { label: 'Overwatch 2',       yaw: 0.0066,       min: 0.01, max: 100, step: 0.000001, decimals: 6 },
+        marvelRivals: { label: 'Marvel Rivals',     yaw: 0.0066,       min: 0.01, max: 100, step: 0.000001, decimals: 6 },
+        apex:         { label: 'Apex Legends',      yaw: 0.022,        min: 0.01, max: 20,  step: 0.000001, decimals: 6 },
+        rainbow6:     { label: 'Rainbow Six Siege (default 0.02)', yaw: 0.005729578, min: 0.01, max: 100, step: 0.000001, decimals: 6 }
+    },
+
+    // Canonical internal scale: Valorant yaw 0.07 degrees/count.
+    sensitivityFactor: 0.07 * Math.PI / 180,
     
     // Adaptive difficulty (streak-based)
     adaptive: {
@@ -32,8 +62,9 @@ const CFG = {
     // Mode 1: Gabor Scout
     mode1: {
         params: {
-            targetSize: { min: 100, mid: 100, max: 100 },
-            ringRadius: { min: 500, mid: 500, max: 500 },
+            targetSize: { min: 70, mid: 70, max: 70 },
+            ringRadius: { min: 250, mid: 250, max: 250 },
+            centerYOffset: -165,
             targetOpacity: { min: 0.5, mid: 0.03, max: 0.001 },
             contrast: { min: 0.5, mid: 0.03, max: 0.001 },
             timeout: { min: 5000, mid: 3000, max: 800 }
@@ -68,49 +99,34 @@ const CFG = {
         }
     },
 
-    // Mode 4: Landolt Saccade
+    // Mode 4: Target Lock (timed dynamic training)
     mode4: {
+        referenceHz: 144,
+        maskFrames: 14,
+        targetDepth: 14,
         params: {
-            ringSize: { min: 50, mid: 15, max: 1 },
-            contrast: { min: 1.0, mid: 0.6, max: 0.01 },
-            timeout: { min: 2000, mid: 600, max: 100 },
-            eccentricity: { min: 150, mid: 300, max: 480 }
+            // All values are expressed at easy / standard / maximum difficulty.
+            // Fractional 144 Hz reference frames preserve exact millisecond
+            // anchors: Lv.100 delay = 100 ms and probe duration = 50 ms.
+            targetDelayFrames: { min: 58, mid: 14.4, max: 2.88 },
+            probeFrames: { min: 12, mid: 7.2, max: 2 },
+            decoyCount: { min: 2, mid: 7, max: 12 },
+            noiseCount: { min: 4, mid: 12.5, max: 20 }
         }
     },
 
-    // Mode 5: Parafoveal Ghost
+    // Mode 5: Peripheral Pop
     mode5: {
         params: {
-            primarySize: { min: 100, mid: 60, max: 10 },
-            primarySpeed: { min: 2, mid: 4, max: 20 },
-            ghostSize: { min: 80, mid: 50, max: 10 },
-            ghostDuration: { min: 1000, mid: 600, max: 100 },
-            ghostEccentricity: { min: 300, mid: 500, max: 1000 },
-            ghostFrequency: { min: 1000, mid: 600, max: 100 },
-            blueRatio: { min: 0.7, mid: 0.55, max: 0.4 },
-            returnWindow: { min: 1000, mid: 600, max: 100 },
-            hitTolerance: { min: 80, mid: 50, max: 10 },
-            integrityGainRate: { min: 1.5, max: 1.5 },
-            integrityLossIdle: { min: 0.8, max: 1.5 },
-            integrityLossBlue: { min: 0.3, max: 0.5 },
-            integrityLossRed: { min: 2, max: 5 }
+            ballSize: { min: 90, mid: 35, max: 5 },
+            dwellMs: { min: 1800, mid: 200, max: 20 },
+            fullConeDeg: 30,
+            respawnDelayMs: 120
         }
     },
 
-    // Mode 6: Memory Sequencer
+    // Mode 6: Cognitive Switch
     mode6: {
-        params: {
-            displayTime: { min: 800, mid: 400, max: 50 },
-            delayBeforeRecall: { min: 500, mid: 1500, max: 3000 },
-            targetSize: { min: 100, mid: 70, max: 10 },
-            spatialSpread: { min: 160, mid: 190, max: 300 },
-            clusterRadius: { min: 700, mid: 500, max: 300 },
-            positionTolerance: { min: 80, mid: 50, max: 5 }
-        }
-    },
-
-    // Mode 7: Cognitive Switch
-    mode7: {
         params: {
             targetSize: { min: 100, mid: 50, max: 10 },
             moveSpeed: { min: 5, mid: 30, max: 80 },
@@ -144,6 +160,25 @@ const WALL_DISTANCE = CFG.wall.distance;
 const WALL_WIDTH = CFG.wall.width;
 const WALL_HEIGHT = CFG.wall.height;
 const SENS_FACTOR = CFG.sensitivityFactor;
+
+function getSensitivityProfile(profileId) {
+    return CFG.sensitivityProfiles[profileId] || CFG.sensitivityProfiles.valorant;
+}
+
+function getSensitivityMultiplier(userSettings = {}) {
+    const profile = getSensitivityProfile(userSettings.sensitivityGame);
+    const value = Number(userSettings.sensitivity);
+    const sensitivity = Number.isFinite(value) && value > 0 ? value : 1;
+    return (profile.yaw * sensitivity) / CFG.sensitivityProfiles.valorant.yaw;
+}
+
+function convertSensitivity(value, fromProfileId, toProfileId) {
+    const from = getSensitivityProfile(fromProfileId);
+    const to = getSensitivityProfile(toProfileId);
+    const sourceValue = Number(value);
+    if (!Number.isFinite(sourceValue) || sourceValue <= 0) return 1;
+    return sourceValue * from.yaw / to.yaw;
+}
 
 // ==================== DIFFICULTY SCALING ====================
 

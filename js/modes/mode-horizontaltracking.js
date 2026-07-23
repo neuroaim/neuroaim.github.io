@@ -1,8 +1,8 @@
-// ==================== MODE 8: VERTICAL BAR TRACKING ====================
+// ==================== MODE 7: HORIZONTAL TRACKING ====================
 // Vertical bar left-right tracking mode with Inertial Strafe physics
 
 class VerticalBarTrackingMode extends BaseMode {
-    static ID = 8;
+    static ID = 7;
     static COLOR = '#ff6600';
     static PARAMS = {
         barWidth:        { min: 50, mid: 30, max: 10 },
@@ -29,20 +29,42 @@ class VerticalBarTrackingMode extends BaseMode {
             acceleration: 0.25  // Inertia factor: Lower = slippery/heavy, Higher = snappy/responsive
                                 // 0.25 simulates a realistic acceleration curve (like Apex/Overwatch)
         };
+        this.depthBag = [];
         this.spawnTarget();
+    }
+
+    nextDepth() {
+        if (!this.depthBag.length) {
+            this.depthBag = [
+                { band: 'near', min: 10.5, max: 12.5 },
+                { band: 'mid', min: 15.5, max: 17.5 },
+                { band: 'far', min: 19.5, max: 21.0 }
+            ].sort(() => Math.random() - 0.5);
+        }
+        const selected = this.depthBag.pop();
+        return {
+            band: selected.band,
+            meters: selected.min + Math.random() * (selected.max - selected.min)
+        };
     }
     
     spawnTarget() {
-        const rangeX = 2500;
+        const depth = this.nextDepth();
+        const referenceDepth = CFG.rangeProfiles[7].targetDistance;
+        const depthRatio = depth.meters / referenceDepth;
+        const rangeX = 1440 * depthRatio;
         
         this.state.target = {
             x: (Math.random() - 0.5) * rangeX,
             y: 0,  // Vertical bar centered vertically
-            z: WALL_DISTANCE,
+            z: WALL_DISTANCE * depthRatio,
+            depthMeters: depth.meters,
+            depthBand: depth.band,
+            depthRatio,
             vx: 0,
             width: this.param('barWidth'),
             height: this.param('barHeight'),
-            spawnTime: performance.now()
+            spawnTime: this.now()
         };
         
         // Reset physics state on spawn
@@ -53,6 +75,7 @@ class VerticalBarTrackingMode extends BaseMode {
         
         this.state.trackProgress = 0;
         this.state.isLocked = false;
+        this.state.totalTrackTime = 0;
         this.startTrial();
     }
     
@@ -61,7 +84,7 @@ class VerticalBarTrackingMode extends BaseMode {
         if (!t) return;
         
         // Timeout check
-        const age = performance.now() - t.spawnTime;
+        const age = this.now() - t.spawnTime;
         if (age > this.constructor.PARAMS.killTimeout) {
             this.recordMiss(this.flashText('timeout'));
             this.spawnTarget();
@@ -83,7 +106,7 @@ class VerticalBarTrackingMode extends BaseMode {
             
             // Set new Target Velocity (Full speed)
             // Multiplier adds slight variance to walk speed (0.8x to 1.2x)
-            const baseSpeed = this.param('moveSpeed') * 2.5; 
+            const baseSpeed = this.param('moveSpeed') * 2.5 * t.depthRatio;
             const randomSpeedMult = 0.8 + Math.random() * 0.4;
             
             this.state.targetVx = baseSpeed * this.state.moveDir * randomSpeedMult;
@@ -102,14 +125,15 @@ class VerticalBarTrackingMode extends BaseMode {
         const accel = this.state.acceleration;
         
         // Simple Lerp: current += (target - current) * fraction
-        this.state.currentVx += (this.state.targetVx - this.state.currentVx) * accel;
+        const frameIndependentAlpha = 1 - Math.pow(1 - accel, dt / 16.67);
+        this.state.currentVx += (this.state.targetVx - this.state.currentVx) * frameIndependentAlpha;
         
         // 3. Apply Movement
         // Scale by dt/16.67 to maintain consistency with frame rates
         t.x += this.state.currentVx * (dt / 16.67);
         
         // 4. Wall Collisions (with bounce damping)
-        const limitX = 1200;
+        const limitX = 720 * t.depthRatio;
         if (t.x < -limitX) {
             t.x = -limitX;
             this.state.moveDir = 1; // Force Right
@@ -144,7 +168,7 @@ class VerticalBarTrackingMode extends BaseMode {
                 this.state.isLocked = true;
                 
                 // Auto-kill when progress bar is full
-                const rt = performance.now() - t.spawnTime;
+                const rt = this.now() - t.spawnTime;
                 
                 // Track statistics
                 if (typeof sessionStats !== 'undefined') {
@@ -165,6 +189,7 @@ class VerticalBarTrackingMode extends BaseMode {
     }
     
     draw(ctx) {
+        this.engine.range.syncMode(7, this.state, this); return;
         const t = this.state.target;
         if (!t) return;
 

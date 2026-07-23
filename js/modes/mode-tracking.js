@@ -26,7 +26,7 @@ class PureTrackingMode extends BaseMode {
     }
     
     spawnTarget() {
-        const rangeX = 3000;
+        const rangeX = 1440;
         const rangeY = 2000;
         
         this.state.target = {
@@ -37,11 +37,12 @@ class PureTrackingMode extends BaseMode {
             vy: 0,
             size: this.param('targetSize'),
             phase: Math.random() * Math.PI * 2,
-            spawnTime: performance.now()
+            spawnTime: this.now()
         };
         this.state.trackProgress = 0;
         this.state.isLocked = false;
         this.state.afterGaze = null;
+        this.state.totalTrackTime = 0;
         this.startTrial();
     }
     
@@ -51,7 +52,7 @@ class PureTrackingMode extends BaseMode {
         
         
         // Timeout check
-        const age = performance.now() - t.spawnTime;
+        const age = this.now() - t.spawnTime;
         if (age > this.constructor.PARAMS.killTimeout) {
             this.recordMiss(this.flashText('timeout'));
             this.spawnTarget();
@@ -61,7 +62,7 @@ class PureTrackingMode extends BaseMode {
         // Organic Lissajous movement
         const speed = this.param('moveSpeed');
         const complexity = this.param('curveComplexity');
-        const time = performance.now() * 0.001;
+        const time = this.now() * 0.001;
         
         t.vx = Math.sin(time * 1.3 * complexity) * speed + Math.cos(time * 2.1) * speed * 0.5;
         t.vy = Math.cos(time * 1.1 * complexity) * speed + Math.sin(time * 2.7) * speed * 0.5;
@@ -69,7 +70,7 @@ class PureTrackingMode extends BaseMode {
         t.y += t.vy * (dt / 16.67);
         
         // Wall bounce
-        const limitX = 1500;
+        const limitX = 720;
         const limitY = 1000;
         if (t.x < -limitX) { t.x = -limitX; t.vx *= -1; }
         if (t.x > limitX)  { t.x = limitX;  t.vx *= -1; }
@@ -91,7 +92,7 @@ class PureTrackingMode extends BaseMode {
                 this.state.isLocked = true;
                 
                 // 进度条读完自动击杀
-                const rt = performance.now() - t.spawnTime;
+                const rt = this.now() - t.spawnTime;
                 
                 // Track statistics
                 if (typeof sessionStats !== 'undefined') {
@@ -113,6 +114,7 @@ class PureTrackingMode extends BaseMode {
     }
     
     draw(ctx) {
+        this.engine.range.syncMode(2, this.state, this); return;
         const t = this.state.target;
         if (!t) return;
 

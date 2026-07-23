@@ -4,13 +4,7 @@
 class GaborScoutMode extends BaseMode {
     static ID = 1;
     static COLOR = '#00ffcc';
-    static PARAMS = {
-        targetSize:     { min: 100, mid: 100, max: 100 },
-        ringRadius:     { min: 300, mid: 300, max: 300 },
-        targetOpacity:  { min: 0.5, mid: 0.02, max: 0.001 },
-        contrast:       { min: 0.5, mid: 0.02, max: 0.001 },
-        timeout:        { min: 5000, mid: 3000, max: 800 }
-    };
+    static PARAMS = CFG.mode1.params;
     
     init() {
         if (typeof NoiseSystem !== 'undefined') {
@@ -29,8 +23,10 @@ class GaborScoutMode extends BaseMode {
     
     spawnTargets() {
         const ringRadius = this.param('ringRadius');
+        const centerYOffset = this.param('centerYOffset');
         const targetSize = this.param('targetSize');
         const targetOpacity = this.param('targetOpacity');
+        const contrast = this.param('contrast');
         const timeout = this.param('timeout');
         
         const targets = [];
@@ -42,7 +38,7 @@ class GaborScoutMode extends BaseMode {
             const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
             targets.push({
                 finalX: Math.cos(angle) * ringRadius,
-                finalY: Math.sin(angle) * ringRadius,
+                finalY: Math.sin(angle) * ringRadius + centerYOffset,
                 currentX: 0,
                 currentY: 0,
                 z: WALL_DISTANCE,
@@ -50,6 +46,7 @@ class GaborScoutMode extends BaseMode {
                 isReal: (i === realTargetIndex),
                 isVertical: (i === realTargetIndex),
                 opacity: targetOpacity,
+                contrast,
                 brownianX: 0,
                 brownianY: 0
             });
@@ -57,7 +54,7 @@ class GaborScoutMode extends BaseMode {
         
         this.state.targets = targets;
         this.state.realTargetIndex = realTargetIndex;
-        this.state.spawnTime = performance.now();
+        this.state.spawnTime = this.now();
         this.state.brownianTimer = 0;
         this.state.timeout = timeout;
         this.startTrial();
@@ -66,7 +63,7 @@ class GaborScoutMode extends BaseMode {
     update(dt) {
         if (!this.state.targets || this.state.targets.length === 0) return;
         
-        const elapsed = performance.now() - this.state.spawnTime;
+        const elapsed = this.now() - this.state.spawnTime;
         
         // Timeout check
         if (elapsed > this.state.timeout + this.state.animationDuration) {
@@ -106,7 +103,7 @@ class GaborScoutMode extends BaseMode {
     onClick(x, y) {
         if (!this.state.targets || this.state.targets.length === 0) return false;
         
-        const elapsed = performance.now() - this.state.spawnTime;
+        const elapsed = this.now() - this.state.spawnTime;
         
         // Don't allow clicks during animation
         if (elapsed < this.state.animationDuration * 0.8) return false;
@@ -139,9 +136,10 @@ class GaborScoutMode extends BaseMode {
     }
     
     draw(ctx) {
+        this.engine.range.syncMode(1, this.state, this); return;
         if (!this.state.targets || this.state.targets.length === 0) return;
         
-        const elapsed = performance.now() - this.state.spawnTime;
+        const elapsed = this.now() - this.state.spawnTime;
         const animProgress = Math.min(1, elapsed / this.state.animationDuration);
         
         // Draw each Gabor target using global drawGaborPatch function

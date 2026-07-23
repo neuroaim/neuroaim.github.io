@@ -1,9 +1,9 @@
-// ==================== MODE 7: COGNITIVE SWITCH (RESTORED) ====================
+// ==================== MODE 6: COGNITIVE SWITCH (RESTORED) ====================
 // Target ACC conflict monitoring and rule flexibility
 // EXACT LOGIC RESTORATION: Rule Switching (Cold/Warm), HUD, Warning Text
 
 class CognitiveSwitchMode extends BaseMode {
-    static ID = 7;
+    static ID = 6;
     static COLOR = '#ff8844';
     static PARAMS = {
         targetSize:      { min: 100, mid: 50, max: 10 },
@@ -25,7 +25,7 @@ class CognitiveSwitchMode extends BaseMode {
     }
     
     spawnTarget() {
-        const rangeX = 3000;
+        const rangeX = 1440;
         const rangeY = 2000;
         const isInhibit = Math.random() < this.param('inhibitionRatio');
         
@@ -55,7 +55,7 @@ class CognitiveSwitchMode extends BaseMode {
             size: this.param('targetSize'),
             color: color,
             shouldShoot: !isInhibit, // Derived property
-            spawnTime: performance.now()
+            spawnTime: this.now()
         });
     }
     
@@ -98,7 +98,7 @@ class CognitiveSwitchMode extends BaseMode {
         }
         
         // 3. Move Targets
-        const limitX = 1500; 
+        const limitX = 720;
         const limitY = 1000;
         
         // Update physics
@@ -114,7 +114,7 @@ class CognitiveSwitchMode extends BaseMode {
         });
         
         // 4. Prune Old Targets
-        const now = performance.now();
+        const now = this.now();
         const newTargets = [];
         this.state.targets.forEach(t => {
             const age = now - t.spawnTime;
@@ -144,7 +144,7 @@ class CognitiveSwitchMode extends BaseMode {
             if (res.dist <= (t.size + 5)) {
                 if (t.shouldShoot) {
                     // Correct Hit
-                    const rt = performance.now() - t.spawnTime;
+                    const rt = this.now() - t.spawnTime;
                     this.recordHit(rt);
                 } else {
                     // Wrong Target (Inhibition Fail)
@@ -162,6 +162,7 @@ class CognitiveSwitchMode extends BaseMode {
     }
     
     draw(ctx) {
+        this.engine.range.syncMode(6, this.state, this); return;
         // === HUD: Current Rule ===
         ctx.save();
         const rule = this.state.rule;

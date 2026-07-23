@@ -1,6 +1,36 @@
 // ==================== INPUT SYSTEM ====================
 // Mouse and keyboard input handling with pointer lock
 
+// Ask the browser for unaccelerated counts so the selected game's yaw maps to
+// the same physical turn. Older browsers fall back to ordinary pointer lock.
+function requestAimPointerLock(element) {
+    if (!element || typeof element.requestPointerLock !== 'function') return null;
+    if (document.pointerLockElement === element) return null;
+
+    const fallback = () => {
+        window.aimRawInputAvailable = false;
+        try {
+            return element.requestPointerLock();
+        } catch (error) {
+            console.warn('[Input] Pointer lock failed:', error);
+            return null;
+        }
+    };
+
+    try {
+        const request = element.requestPointerLock({ unadjustedMovement: true });
+        window.aimRawInputAvailable = true;
+        if (request && typeof request.catch === 'function') {
+            request.catch(() => fallback()).catch(error => {
+                console.warn('[Input] Pointer lock fallback failed:', error);
+            });
+        }
+        return request;
+    } catch (error) {
+        return fallback();
+    }
+}
+
 const Input = {
     // Accumulator for smooth mouse movement
     accumulator: { x: 0, y: 0 },
@@ -49,9 +79,7 @@ const Input = {
         const phase = this.engine?.phase;
         if (phase === 'playing' || phase === 'countdown') {
             this.canvas.requestPointerLock = this.canvas.requestPointerLock || this.canvas.mozRequestPointerLock;
-            if (typeof this.canvas.requestPointerLock === 'function') {
-                this.canvas.requestPointerLock();
-            }
+            requestAimPointerLock(this.canvas);
         }
     },
     

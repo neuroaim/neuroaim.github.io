@@ -14,7 +14,7 @@ function tryLockPointer() {
         canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
         if (typeof canvas.requestPointerLock === 'function') {
             requestAnimationFrame(() => {
-                canvas.requestPointerLock();
+                requestAimPointerLock(canvas);
             });
         }
     }
@@ -70,7 +70,7 @@ function showModeInfo(mode) {
     
     const closeText = (typeof i18n !== 'undefined' && i18n.t) ? i18n.t('close') : 'CLOSE';
     const howToPlayText = (typeof i18n !== 'undefined' && i18n.current === 'zh') ? '专家指引 & 操作' : 'EXPERT CUES & CONTROLS';
-    const scienceText = (typeof i18n !== 'undefined' && i18n.current === 'zh') ? '神经机制 & 频闪策略' : 'NEUROSCIENCE & STROBE SYNERGY';
+    const scienceText = (typeof i18n !== 'undefined' && i18n.current === 'zh') ? '神经机制' : 'NEUROSCIENCE';
     
     let html = `<h2>${info.title}</h2>`;
     html += `<div class="info-section">
@@ -118,7 +118,7 @@ function closeSettings() {
 function updateStrobeToggles() {
     const settings = Storage.getSettings();
     
-    for (let mode = 1; mode <= 7; mode++) {
+    for (const mode of ModeRegistry.getAllIds()) {
         const el = document.getElementById(`strobe-mode-${mode}`);
         if (el && settings.strobeEnabled) {
             el.checked = settings.strobeEnabled[mode] || false;
@@ -127,53 +127,86 @@ function updateStrobeToggles() {
 }
 
 function toggleModeStrobe(mode, enabled) {
+    if (mode !== 2 && mode !== 7) return;
     Storage.setStrobeEnabled(mode, enabled);
 }
 
 // ===== RESULT SCREEN =====
 function showResults(stats) {
+    const zh = i18n.current === 'zh';
     const modeName = i18n.modeName(stats.mode);
     const modeEl = document.getElementById('result-mode');
     if (modeEl) modeEl.innerText = modeName;
-    
-    const strobeText = stats.strobe ? i18n.t('ui.strobeOn') : i18n.t('ui.normal');
+
+    const strobeText = stats.strobe ? i18n.t('strobeOn') : i18n.t('normal');
     const strobeEl = document.getElementById('result-strobe');
     if (strobeEl) {
         strobeEl.innerText = strobeText;
         strobeEl.className = stats.strobe ? 'strobe-badge active' : 'strobe-badge';
     }
-    
-    // Main stats
+
     const accEl = document.getElementById('result-accuracy');
-    if (accEl) accEl.innerText = stats.accuracy + '%';
-    
     const rtEl = document.getElementById('result-avgrt');
-    if (rtEl) rtEl.innerText = stats.avgRt + ' ms';
-    
     const trialsEl = document.getElementById('result-trials');
-    if (trialsEl) trialsEl.innerText = stats.hits + ' / ' + stats.trials;
-    
-    // Difficulty change
-    const diffChange = stats.endDifficulty - stats.startDifficulty;
     const diffEl = document.getElementById('result-difficulty');
-    if (diffEl) diffEl.innerText = 'Lv.' + Math.round(stats.endDifficulty * 100);
-    
     const changeEl = document.getElementById('result-diff-change');
-    if (changeEl) {
-        changeEl.innerText = (diffChange >= 0 ? '+' : '') + Math.round(diffChange * 100);
-        changeEl.className = 'diff-change ' + (diffChange > 0 ? 'positive' : diffChange < 0 ? 'negative' : '');
-    }
-    
-    // Mini stats
     const minRtEl = document.getElementById('result-minrt');
-    if (minRtEl) minRtEl.innerText = stats.minRt + 'ms';
-    
     const maxRtEl = document.getElementById('result-maxrt');
-    if (maxRtEl) maxRtEl.innerText = stats.maxRt + 'ms';
-    
     const consEl = document.getElementById('result-consistency');
-    if (consEl) consEl.innerText = '±' + stats.rtStdDev + 'ms';
-    
+    const labels = {
+        primary: document.getElementById('result-primary-label'),
+        secondary: document.getElementById('result-secondary-label'),
+        trials: document.getElementById('result-trials-label'),
+        difficulty: document.getElementById('result-difficulty-label'),
+        min: document.getElementById('result-min-label'),
+        max: document.getElementById('result-max-label'),
+        consistency: document.getElementById('result-consistency-label'),
+    };
+
+    if (stats.mode === 4) {
+        if (accEl) accEl.innerText = `${stats.accuracy}%`;
+        if (rtEl) rtEl.innerText = `Lv.${Math.round(stats.endDifficulty * 100)}`;
+        if (trialsEl) trialsEl.innerText = `${stats.hits} / ${stats.trials}`;
+        if (diffEl) diffEl.innerText = `${stats.averageLockDelayMs || 0} ms`;
+        if (changeEl) {
+            const change = Math.round((stats.endDifficulty - stats.startDifficulty) * 100);
+            changeEl.style.display = '';
+            changeEl.innerText = `${change >= 0 ? '+' : ''}${change}`;
+            changeEl.className = `diff-change ${change > 0 ? 'positive' : change < 0 ? 'negative' : ''}`;
+        }
+        if (minRtEl) minRtEl.innerText = `Lv.${Math.round((stats.peakDifficulty || stats.endDifficulty) * 100)}`;
+        if (maxRtEl) maxRtEl.innerText = `${stats.averageProbeDurationMs || 0} ms`;
+        if (consEl) consEl.innerText = `${stats.maxDecoyCount || 0} / ${stats.maxNoiseCount || 0}`;
+        if (labels.primary) labels.primary.innerText = zh ? '正确率' : 'ACCURACY';
+        if (labels.secondary) labels.secondary.innerText = zh ? '最终难度' : 'FINAL DIFFICULTY';
+        if (labels.trials) labels.trials.innerText = zh ? '正确 / 尝试' : 'CORRECT / TRIALS';
+        if (labels.difficulty) labels.difficulty.innerText = zh ? '平均符号等待' : 'AVG SYMBOL DELAY';
+        if (labels.min) labels.min.innerText = zh ? '最高难度' : 'PEAK DIFFICULTY';
+        if (labels.max) labels.max.innerText = zh ? '平均符号持续' : 'AVG SYMBOL DURATION';
+        if (labels.consistency) labels.consistency.innerText = zh ? '最大干扰：周围 / 掩蔽' : 'MAX DISTRACTORS: AROUND / MASK';
+    } else {
+        const diffChange = stats.endDifficulty - stats.startDifficulty;
+        if (accEl) accEl.innerText = `${stats.accuracy}%`;
+        if (rtEl) rtEl.innerText = `${stats.avgRt} ms`;
+        if (trialsEl) trialsEl.innerText = `${stats.hits} / ${stats.trials}`;
+        if (diffEl) diffEl.innerText = `Lv.${Math.round(stats.endDifficulty * 100)}`;
+        if (changeEl) {
+            changeEl.style.display = '';
+            changeEl.innerText = `${diffChange >= 0 ? '+' : ''}${Math.round(diffChange * 100)}`;
+            changeEl.className = `diff-change ${diffChange > 0 ? 'positive' : diffChange < 0 ? 'negative' : ''}`;
+        }
+        if (minRtEl) minRtEl.innerText = `${stats.minRt}ms`;
+        if (maxRtEl) maxRtEl.innerText = `${stats.maxRt}ms`;
+        if (consEl) consEl.innerText = `±${stats.rtStdDev}ms`;
+        if (labels.primary) labels.primary.innerText = i18n.t('accuracy');
+        if (labels.secondary) labels.secondary.innerText = i18n.t('avgReaction');
+        if (labels.trials) labels.trials.innerText = i18n.t('hitsTrials');
+        if (labels.difficulty) labels.difficulty.innerText = i18n.t('finalDifficulty');
+        if (labels.min) labels.min.innerText = i18n.t('bestRT');
+        if (labels.max) labels.max.innerText = i18n.t('worstRT');
+        if (labels.consistency) labels.consistency.innerText = i18n.t('consistency');
+    }
+
     showScreen('result-screen');
 }
 
@@ -206,6 +239,10 @@ function togglePause() {
     const resumeBtn = document.getElementById('btn-resume');
     
     if (GameEngine.phase === 'playing') {
+        if (GameEngine.modeId === 4 && GameEngine.mode?.interrupt) {
+            GameEngine.mode.interrupt('manual_pause');
+        }
+        GameEngine.pauseClock();
         GameEngine.phase = 'paused';
         if (pauseModal) pauseModal.classList.remove('hidden');
         
@@ -252,8 +289,7 @@ function resumeGame() {
     if (pauseModal) pauseModal.classList.add('hidden');
     if (quitConfirm) quitConfirm.classList.add('hidden');
     
-    GameEngine.phase = 'playing';
-    tryLockPointer();
+    GameEngine.requestResume();
 }
 
 function confirmQuit() {

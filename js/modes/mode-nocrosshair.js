@@ -1,7 +1,6 @@
 // ==================== MODE 3: SURGICAL LOCK (SIMPLIFIED) ====================
-// Simple target with fading crosshair
+// Wall-mounted target with no crosshair and persistent shot-origin feedback
 // - 1 second timeout
-// - Crosshair fades over time
 // - Horizontal spawn option
 // - Vertical limits
 
@@ -15,12 +14,6 @@ class NoCrosshairMode extends BaseMode {
         // Timeout fixed at 1 second
         timeout: { min: 1000, mid: 1000, max: 1000 },
         
-        // Crosshair fade timing (ms) - based on GAME start time
-        // Low difficulty: crosshair visible for longer
-        // High difficulty: crosshair fades faster
-        crosshairFadeStart: { min: 5000, mid: 5000, max: 5000 },  // When fade starts
-        crosshairFadeEnd:   { min: 8000, mid: 8000, max: 8000 },  // When fully invisible
-        
         // Horizontal spawn chance (0-1)
         horizontalSpawnChance: { min: 0.7, mid: 0.7, max: 0.7 },
         
@@ -32,15 +25,21 @@ class NoCrosshairMode extends BaseMode {
         
         // Jump distance
         jumpDistanceMin: { min: 50, mid: 100, max: 300 },
-        jumpDistanceMax: { min: 100, mid: 600, max: 900 }
+        jumpDistanceMax: { min: 100, mid: 600, max: 900 },
+
+        // Restore the original dependency-removal ramp: fully visible for the
+        // first five seconds, then fade smoothly to invisible over three more.
+        crosshairFadeStart: { min: 5000, mid: 5000, max: 5000 },
+        crosshairFadeEnd: { min: 8000, mid: 8000, max: 8000 }
     };
     
     init() {
+        this.disposed = false;
         this.state = {
             target: null,
+            gameStartTime: this.now(),
             lastX: 0,
             lastY: 0,
-            gameStartTime: performance.now(),
             // Feedback state
             feedback: null  // { x, y, z, size, isHit, startTime }
         };
@@ -64,8 +63,8 @@ class NoCrosshairMode extends BaseMode {
     }
     
     spawnTarget() {
-        const minJump = this.param('jumpDistanceMin');
-        const maxJump = this.param('jumpDistanceMax');
+        const minJump = this.param('jumpDistanceMin') * 0.6;
+        const maxJump = this.param('jumpDistanceMax') * 0.6;
         const horizontalChance = this.param('horizontalSpawnChance');
         const verticalRange = this.param('verticalRange');
         const horizontalRange = this.param('horizontalRange');
@@ -74,7 +73,7 @@ class NoCrosshairMode extends BaseMode {
         const by = this.state.lastY;
         
         // Bounds - use range parameters with wall dimensions
-        const limitX = (WALL_WIDTH / 2) * horizontalRange;
+        const limitX = 900 * horizontalRange;
         const limitY = (WALL_HEIGHT / 2) * verticalRange;
         
         let nx = 0, ny = 0;
@@ -149,12 +148,21 @@ class NoCrosshairMode extends BaseMode {
         this.state.lastX = nx;
         this.state.lastY = ny;
         
+        const size = this.param('targetSize');
+        const profile = CFG.rangeProfiles[3];
+        const depthScale = profile.targetDistance / 8;
+        const physicalRadius = 0.38 * (size / 57) * depthScale;
+        const wallFront = profile.wallDistance - 0.225;
+        const physicalCenterDepth = wallFront - physicalRadius - 0.012;
+
         this.state.target = {
             x: nx,
             y: ny,
-            z: WALL_DISTANCE,
-            size: this.param('targetSize'),
-            spawnTime: performance.now(),
+            // Each differently-sized sphere is tangent to the front face of
+            // the backstop instead of floating on one arbitrary target plane.
+            z: WALL_DISTANCE * physicalCenterDepth / profile.targetDistance,
+            size,
+            spawnTime: this.now(),
             timeout: this.param('timeout')
         };
         
@@ -162,29 +170,31 @@ class NoCrosshairMode extends BaseMode {
     }
     
     update(dt) {
-        // Update crosshair fade based on GAME time
-        const gameAge = performance.now() - this.state.gameStartTime;
-        const fadeStart = this.param('crosshairFadeStart');
-        const fadeEnd = this.param('crosshairFadeEnd');
-        
-        let opacity = 1.0;
-        if (gameAge >= fadeEnd) {
-            opacity = 0.0;
-        } else if (gameAge > fadeStart) {
-            opacity = 1.0 - (gameAge - fadeStart) / (fadeEnd - fadeStart);
-        }
-        
+        if (this.disposed) return;
         if (typeof setCrosshairOpacity === 'function') {
+            const age = this.now() - this.state.gameStartTime;
+            const fadeStart = this.param('crosshairFadeStart');
+            const fadeEnd = this.param('crosshairFadeEnd');
+            const opacity = age <= fadeStart
+                ? 1
+                : age >= fadeEnd
+                    ? 0
+                    : 1 - (age - fadeStart) / Math.max(1, fadeEnd - fadeStart);
             setCrosshairOpacity(opacity);
         }
         
-        // If showing feedback, don't process timeout
-        if (this.state.feedback) return;
+        if (this.state.feedback) {
+            if (this.now() - this.state.feedback.startTime >= 500) {
+                this.state.feedback = null;
+                this.spawnTarget();
+            }
+            return;
+        }
         
         const t = this.state.target;
         if (!t) return;
         
-        const targetAge = performance.now() - t.spawnTime;
+        const targetAge = this.now() - t.spawnTime;
         
         // Timeout for current target
         if (targetAge >= t.timeout) {
@@ -199,14 +209,10 @@ class NoCrosshairMode extends BaseMode {
                 z: t.z,
                 size: t.size,
                 isHit: false,
-                startTime: performance.now()
+                startTime: this.now()
             };
             this.state.target = null;
             
-            setTimeout(() => {
-                this.state.feedback = null;
-                this.spawnTarget();
-            }, 500);
         }
     }
     
@@ -227,15 +233,18 @@ class NoCrosshairMode extends BaseMode {
             }
         });
         
-        // Use base class 3D ray detection
+        // Use the same real geometry intersection for both scoring and the
+        // visible black impact decal. Hits land on the sphere; misses land on
+        // the physical backstop at the exact current sight-line intersection.
+        const impact = this.engine.range.showLatestShotImpact();
+        const isHit = Boolean(impact?.isHit);
         const res = this.getDistanceFromCrosshair(t.x, t.y, t.z);
-        const isHit = res.dist <= t.size;
         
         console.log(isHit ? 'HIT' : 'MISS', { dist: res.dist.toFixed(0), size: t.size });
         
         // Record result
         if (isHit) {
-            const rt = performance.now() - t.spawnTime;
+            const rt = this.now() - t.spawnTime;
             this.engine.recordTrial(true, rt);
             if (typeof playSound === 'function') playSound('hit');
         } else {
@@ -250,27 +259,23 @@ class NoCrosshairMode extends BaseMode {
             z: t.z,
             size: t.size,
             isHit: isHit,
-            startTime: performance.now()
+            startTime: this.now()
         };
         
         // Clear current target
         this.state.target = null;
         
-        // Spawn new target after 0.5 seconds
-        setTimeout(() => {
-            this.state.feedback = null;
-            this.spawnTarget();
-        }, 500);
     }
     
     draw(ctx) {
+        this.engine.range.syncMode(3, this.state, this); return;
         // Draw feedback (green for hit, red for miss)
         if (this.state.feedback) {
             const fb = this.state.feedback;
             const p = project3D(fb.x, fb.y, fb.z, this.engine.mouseX, this.engine.mouseY);
             if (p.visible) {
                 const radius = fb.size * p.scale;
-                const age = performance.now() - fb.startTime;
+            const age = this.now() - fb.startTime;
                 const alpha = Math.max(0, 1 - age / 500); // Fade out over 0.5 seconds
                 
                 ctx.save();
@@ -337,6 +342,9 @@ class NoCrosshairMode extends BaseMode {
     }
     
     cleanup() {
+        this.disposed = true;
+        this.state.target = null;
+        this.state.feedback = null;
         if (typeof setCrosshairOpacity === 'function') {
             setCrosshairOpacity(1.0);
         }

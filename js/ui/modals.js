@@ -250,18 +250,6 @@ const Modals = {
                         </div>
                     </div>
                     
-                    <div class="settings-section">
-                        <h3 data-i18n="settings.strobeTraining">Strobe Training</h3>
-                        <div class="strobe-toggles">
-                            ${[1,2,3,4,5,6,7].map(m => `
-                                <div class="strobe-toggle">
-                                    <label>${i18n.modeName(m)}</label>
-                                    <input type="checkbox" id="strobe-mode-${m}" onchange="toggleModeStrobe(${m}, this.checked)">
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    
                     <div class="settings-buttons">
                         <button class="btn-reset" onclick="resetSettings()" data-i18n="settings.reset">Reset</button>
                         <button class="btn-close" onclick="Modals.hideSettings()" data-i18n="ui.close">Close</button>

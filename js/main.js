@@ -76,15 +76,15 @@
     // ===== MODE REGISTRATION =====
     
     function registerModes() {
-        // Register all 7 modes
+        // Register all active modes with contiguous IDs after retiring memory sequence.
         // Ensure these Classes are available globally via script tags
         if (typeof GaborScoutMode !== 'undefined') ModeRegistry.register(GaborScoutMode);
         if (typeof PureTrackingMode !== 'undefined') ModeRegistry.register(PureTrackingMode);
-        if (typeof SurgicalLockMode !== 'undefined') ModeRegistry.register(SurgicalLockMode);
-        if (typeof LandoltSaccadeMode !== 'undefined') ModeRegistry.register(LandoltSaccadeMode);
-        if (typeof ParafovealGhostMode !== 'undefined') ModeRegistry.register(ParafovealGhostMode);
-        if (typeof MemorySequencerMode !== 'undefined') ModeRegistry.register(MemorySequencerMode);
+        if (typeof NoCrosshairMode !== 'undefined') ModeRegistry.register(NoCrosshairMode);
+        if (typeof TargetLockMode !== 'undefined') ModeRegistry.register(TargetLockMode);
+        if (typeof PeripheralPopMode !== 'undefined') ModeRegistry.register(PeripheralPopMode);
         if (typeof CognitiveSwitchMode !== 'undefined') ModeRegistry.register(CognitiveSwitchMode);
+        if (typeof VerticalBarTrackingMode !== 'undefined') ModeRegistry.register(VerticalBarTrackingMode);
     }
     
     // ===== UI INITIALIZATION =====
@@ -118,7 +118,7 @@
         // Setup stats button
         const statsBtn = document.getElementById('btn-stats');
         if (statsBtn) {
-            settingsBtn.addEventListener('click', () => showScreen('stats-screen'));
+            statsBtn.addEventListener('click', () => showScreen('stats-screen'));
         }
         
         // Setup guide button
@@ -146,19 +146,23 @@
         
         modeIds.forEach(id => {
             const info = i18n.modeInfo(id);
-            const isStrobe = Storage.isStrobeEnabled(id);
             const name = info.name || `Mode ${id}`;
             const desc = info.description || '';
             const tag = info.tag || '';
-            
-            // 简洁的 strobe 状态指示器（所有卡片都显示）
-            const strobeIndicator = `<span class="strobe-indicator ${isStrobe ? 'on' : 'off'}">STROBE ${isStrobe ? 'ON' : 'OFF'}</span>`;
+            const supportsStrobe = id === 2 || id === 7;
+            const isStrobe = supportsStrobe && Storage.isStrobeEnabled(id);
+            const strobeControl = supportsStrobe ? `
+                <label class="mode-strobe-toggle" onclick="event.stopPropagation()">
+                    <span class="mode-strobe-label">${i18n.current === 'zh' ? '频闪' : 'STROBE'}</span>
+                    <input type="checkbox" ${isStrobe ? 'checked' : ''} aria-label="${i18n.current === 'zh' ? '启用频闪训练' : 'Enable strobe training'}" onchange="toggleHomeStrobe(${id}, this.checked)">
+                    <span class="mode-strobe-track" aria-hidden="true"><span></span></span>
+                </label>` : '';
             html += `
-            <div class="mode-card" onclick="selectModeWithLock(${id})">
+            <div class="mode-card ${supportsStrobe ? 'has-strobe' : ''}" onclick="selectModeWithLock(${id})">
                 <span class="mode-num">${id.toString().padStart(2, '0')}</span>
-                ${strobeIndicator}
                 <h3>${name}</h3>
                 <p>${desc}</p>
+                ${strobeControl}
             </div>
             `;
         });
@@ -168,6 +172,17 @@
 
     // 导出给全局使用
     window.renderModeCards = renderModeCards;
+    window.toggleHomeStrobe = function toggleHomeStrobe(modeId, enabled) {
+        modeId = Number(modeId);
+        if (modeId !== 2 && modeId !== 7) return;
+        Storage.setStrobeEnabled(modeId, Boolean(enabled));
+        if (typeof settings === 'object') {
+            if (!settings.strobeEnabled) settings.strobeEnabled = {};
+            if (enabled) settings.strobeEnabled[modeId] = true;
+            else delete settings.strobeEnabled[modeId];
+        }
+        renderModeCards();
+    };
     
     // ===== CANVAS SETUP =====
     
@@ -193,10 +208,6 @@
         window.addEventListener('resize', resize);
         
         // Initialize input system
-        if (typeof Input !== 'undefined') {
-            Input.init(canvas, GameEngine);
-        }
-        
         // Initialize game engine
         GameEngine.init(canvas);
     }
@@ -230,6 +241,10 @@
         if (GameEngine.phase === 'countdown') return;
 
         if (GameEngine.phase === 'playing') {
+            if (GameEngine.modeId === 4 && GameEngine.mode?.interrupt) {
+                GameEngine.mode.interrupt('manual_pause');
+            }
+            GameEngine.pauseClock();
             GameEngine.phase = 'paused';
             Modals.showPause();
         } else if (GameEngine.phase === 'paused') {
@@ -240,8 +255,7 @@
     window.resumeGame = function() {
         Modals.hidePause();
         Modals.hide('quit-confirm'); 
-        GameEngine.phase = 'playing';
-        tryLockPointer();
+        GameEngine.requestResume();
     };
     
     window.quitGame = function() {

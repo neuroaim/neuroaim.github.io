@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neuro-Aim</title>
+    <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/main.css">
 </head>
@@ -86,12 +87,30 @@
                 <h3 data-i18n="mouse">CONTROLS</h3>
             </div>
             <div class="settings-grid">
+                <div class="setting-item sensitivity-profile-row">
+                    <label for="setting-sensitivity-game" data-i18n="gameProfile">Game profile</label>
+                    <select class="settings-select" id="setting-sensitivity-game" onchange="updateSensitivityGame(this.value)">
+                        <option value="cs2">Counter-Strike 2</option>
+                        <option value="valorant">Valorant</option>
+                        <option value="cod">Call of Duty / Warzone</option>
+                        <option value="overwatch">Overwatch 2</option>
+                        <option value="marvelRivals">Marvel Rivals</option>
+                        <option value="apex">Apex Legends</option>
+                        <option value="rainbow6">Rainbow Six Siege (0.02)</option>
+                    </select>
+                </div>
                 <div class="setting-item full-width">
-                    <label><span data-i18n="sensitivity">Sensitivity</span> <span class="hint">(0.01 - 10.00)</span></label>
+                    <label><span data-i18n="sensitivity">Sensitivity</span> <span class="hint" id="sensitivity-range">(0.01 - 10.00)</span></label>
                     <div class="sensitivity-group">
-                        <input type="range" class="styled-slider sens-slider" id="setting-sensitivity" min="0.01" max="10" step="0.01" value="1" oninput="updateSensitivity(this.value)">
-                        <input type="number" class="sens-input" id="sens-input" min="0.01" max="10" step="0.01" value="1.00" onchange="onSensitivityBlur(this)" oninput="onSensitivityInput(this.value)">
+                        <input type="range" class="styled-slider sens-slider" id="setting-sensitivity" min="0.01" max="10" step="0.001" value="1" oninput="updateSensitivity(this.value)">
+                        <input type="number" class="sens-input" id="sens-input" min="0.01" max="10" step="0.001" value="1.000" onchange="onSensitivityBlur(this)" oninput="onSensitivityInput(this.value)">
                     </div>
+                </div>
+                <div class="sensitivity-calibration" aria-live="polite">
+                    <div><span data-i18n="trainerFov">Trainer FOV</span><strong id="trainer-fov-value">CS · 106.26° H / 73.74° V</strong></div>
+                    <div><span data-i18n="hipfireMatch">Hip-fire 360° match</span><strong id="sensitivity-equivalent">—</strong></div>
+                    <small data-i18n="adsNote">ADS/zoom multipliers are not applied.</small>
+                    <small data-i18n="rawInputNote">Raw mouse input is requested when the browser supports it.</small>
                 </div>
             </div>
         </div>
@@ -126,32 +145,6 @@
             <div class="crosshair-preview"><canvas id="crosshair-preview-canvas"></canvas></div>
         </div>
 
-        <!-- Strobe Section -->
-        <div class="settings-section">
-            <div class="section-title">
-                <span class="section-icon">⚡</span>
-                <h3 data-i18n="strobeSettings">STROBE TRAINING</h3>
-                <div class="strobe-help">
-                    <span class="help-icon">?</span>
-                    <div class="help-tooltip">
-                        <p class="warning" data-i18n="strobeWarning">⚠️ WARNING: Do NOT enable if you have photosensitive epilepsy!</p>
-                        <p data-i18n="strobeTooltip">Recommended for Mode 2. By intermittently depriving vision, it forces the cerebellum to work under high load, greatly improving tracking training efficiency.</p>
-                    </div>
-                </div>
-            </div>
-            <p class="section-desc" data-i18n="strobeDesc">Enable strobe effect to increase training difficulty</p>
-            <div class="strobe-grid">
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-1" onchange="toggleModeStrobe(1, this.checked)"><span>M1</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-2" onchange="toggleModeStrobe(2, this.checked)"><span>M2</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-3" onchange="toggleModeStrobe(3, this.checked)"><span>M3</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-4" onchange="toggleModeStrobe(4, this.checked)"><span>M4</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-5" onchange="toggleModeStrobe(5, this.checked)"><span>M5</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-6" onchange="toggleModeStrobe(6, this.checked)"><span>M6</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-7" onchange="toggleModeStrobe(7, this.checked)"><span>M7</span></label>
-                <label class="strobe-item"><input type="checkbox" id="strobe-mode-8" onchange="toggleModeStrobe(8, this.checked)"><span>M8</span></label>
-            </div>
-        </div>
-        
         <!-- Actions -->
         <div class="settings-actions">
             <button class="btn-reset" onclick="resetSettings()" data-i18n="reset">RESET ALL</button>
@@ -162,6 +155,7 @@
 
 <div id="game-screen" class="screen">
     <canvas id="game-canvas"></canvas>
+    <div id="strobe-curtain" aria-hidden="true"></div>
     <div class="game-hud" id="hud-container">
         <div class="hud-item"><div class="label" data-i18n="time">TIME</div><div class="value time" id="hud-time">60</div></div>
         <div class="hud-item"><div class="label" data-i18n="trials">TRIALS</div><div class="value trials" id="hud-trials">0</div></div>
@@ -172,6 +166,8 @@
     </div>
     
     <div class="escape-hint" data-i18n="escPause">[ESC] PAUSE</div>
+    <div id="mode-status-text" class="mode-status-text" aria-live="polite"></div>
+    <div id="target-lock-instructions" class="target-lock-instructions" aria-live="polite"></div>
     
     <div class="countdown-overlay" id="countdown-overlay">
         <div class="click-prompt" id="click-prompt" data-i18n="clickToBegin">CLICK TO BEGIN</div>
@@ -206,34 +202,34 @@
     <div class="result-main">
         <div class="result-stat-big">
             <div class="big-value" id="result-accuracy">0%</div>
-            <div class="big-label" data-i18n="accuracy">ACCURACY</div>
+            <div class="big-label" id="result-primary-label" data-i18n="accuracy">ACCURACY</div>
         </div>
         <div class="result-stat-big">
             <div class="big-value" id="result-avgrt">0ms</div>
-            <div class="big-label" data-i18n="avgReaction">AVG REACTION</div>
+            <div class="big-label" id="result-secondary-label" data-i18n="avgReaction">AVG REACTION</div>
         </div>
     </div>
     <div class="result-stats">
         <div class="result-stat">
             <div class="val" id="result-trials">0/0</div>
-            <div class="lbl" data-i18n="hitsTrials">HITS / TRIALS</div>
+            <div class="lbl" id="result-trials-label" data-i18n="hitsTrials">HITS / TRIALS</div>
         </div>
         <div class="result-stat difficulty-stat">
             <div class="val" id="result-difficulty">30%</div>
             <div class="diff-change" id="result-diff-change">+0%</div>
-            <div class="lbl" data-i18n="finalDifficulty">FINAL DIFFICULTY</div>
+            <div class="lbl" id="result-difficulty-label" data-i18n="finalDifficulty">FINAL DIFFICULTY</div>
         </div>
         <div class="result-stat">
             <div class="val" id="result-minrt">0ms</div>
-            <div class="lbl" data-i18n="bestRT">BEST RT</div>
+            <div class="lbl" id="result-min-label" data-i18n="bestRT">BEST RT</div>
         </div>
         <div class="result-stat">
             <div class="val" id="result-maxrt">0ms</div>
-            <div class="lbl" data-i18n="worstRT">WORST RT</div>
+            <div class="lbl" id="result-max-label" data-i18n="worstRT">WORST RT</div>
         </div>
         <div class="result-stat">
             <div class="val" id="result-consistency">±0ms</div>
-            <div class="lbl" data-i18n="consistency">CONSISTENCY</div>
+            <div class="lbl" id="result-consistency-label" data-i18n="consistency">CONSISTENCY</div>
         </div>
     </div>
     <div class="result-actions">
@@ -270,9 +266,9 @@
 <script src="js/modes/mode-gabor.js"></script>
 <script src="js/modes/mode-tracking.js"></script>
 <script src="js/modes/mode-nocrosshair.js"></script>
-<script src="js/modes/mode-landolt.js"></script>
+<script type="module" src="js/core/training-range-3d.js"></script>
+<script src="js/modes/mode-target-lock.js"></script>
 <script src="js/modes/mode-parafoveal.js"></script>
-<script src="js/modes/mode-memory.js"></script>
 <script src="js/modes/mode-cognitive.js"></script>
 <script src="js/modes/mode-horizontaltracking.js"></script>
 

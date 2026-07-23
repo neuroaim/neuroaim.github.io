@@ -2,10 +2,13 @@
 // Centralized storage management
 
 const Storage = {
+    strobeModeIds: [2, 7],
+
     keys: {
         settings: 'neuroaim_settings_v3',
         stats: 'neuroaim_stats_v3',
-        language: 'neuroaim_language'
+        language: 'neuroaim_language',
+        contiguousModeMigration: 'neuroaim_contiguous_mode_ids_v1'
     },
     
     // ===== Generic Methods =====
@@ -38,6 +41,45 @@ const Storage = {
             return false;
         }
     },
+
+    _remapLegacySettings(settings) {
+        const migrated = JSON.parse(JSON.stringify(settings || {}));
+        for (const field of ['difficultyLevels', 'strobeEnabled']) {
+            const source = migrated[field] || {};
+            const next = {};
+            Object.entries(source).forEach(([rawId, value]) => {
+                const id = Number(rawId);
+                if (id === 6) return; // Retired memory-sequence setting.
+                if (id === 7) next[6] = value;
+                else if (id === 8) next[7] = value;
+                else next[rawId] = value;
+            });
+            migrated[field] = next;
+        }
+        return migrated;
+    },
+
+    _remapLegacyStats(stats) {
+        return (Array.isArray(stats) ? stats : [])
+            .filter(session => Number(session?.mode) !== 6)
+            .map(session => ({
+                ...session,
+                mode: Number(session.mode) === 7 ? 6 : Number(session.mode) === 8 ? 7 : session.mode
+            }));
+    },
+
+    _migrateLegacyModeIds() {
+        try {
+            if (localStorage.getItem(this.keys.contiguousModeMigration)) return;
+            const settings = this.get(this.keys.settings, {});
+            const stats = this.get(this.keys.stats, []);
+            this.set(this.keys.settings, this._remapLegacySettings(settings));
+            this.set(this.keys.stats, this._remapLegacyStats(stats));
+            localStorage.setItem(this.keys.contiguousModeMigration, '1');
+        } catch (error) {
+            console.warn('[Storage] Mode ID migration failed:', error);
+        }
+    },
     
     // ===== Settings =====
     
@@ -47,18 +89,29 @@ const Storage = {
         volume: 0.5,
         crosshair: 'cross',
         crosshairScale: 1.0,
+        sensitivityGame: 'valorant',
         sensitivity: 1.0,
         strobeEnabled: {},
         difficultyLevels: {}
     },
+
+    _sanitizeSettings(settings) {
+        const clean = { ...(settings || {}), strobeEnabled: {} };
+        const source = settings?.strobeEnabled || {};
+        this.strobeModeIds.forEach(modeId => {
+            if (source[modeId] === true) clean.strobeEnabled[modeId] = true;
+        });
+        return clean;
+    },
     
     getSettings() {
+        this._migrateLegacyModeIds();
         const saved = this.get(this.keys.settings, {});
-        return deepMerge(this.defaultSettings, saved);
+        return this._sanitizeSettings(deepMerge(this.defaultSettings, saved));
     },
     
     saveSettings(settings) {
-        return this.set(this.keys.settings, settings);
+        return this.set(this.keys.settings, this._sanitizeSettings(settings));
     },
     
     updateSetting(key, value) {
@@ -70,15 +123,14 @@ const Storage = {
     // ===== Stats =====
     
     getStats() {
+        this._migrateLegacyModeIds();
         return this.get(this.keys.stats, []);
     },
     
     saveStats(stats) {
-        // Keep max 2000 sessions
-        if (stats.length > 2000) {
-            stats = stats.slice(-2000);
-        }
-        return this.set(this.keys.stats, stats);
+        // Preserve every session. The history UI paginates presentation rather
+        // than deleting older records from the underlying collection.
+        return this.set(this.keys.stats, Array.isArray(stats) ? stats : []);
     },
     
     addSession(session) {
@@ -119,17 +171,21 @@ const Storage = {
     // ===== Strobe Settings =====
     
     isStrobeEnabled(modeId) {
+        if (!this.strobeModeIds.includes(Number(modeId))) return false;
         const settings = this.getSettings();
         // 直接检查，不依赖默认值
         return settings.strobeEnabled?.[modeId] === true;
     },
     
     setStrobeEnabled(modeId, enabled) {
+        modeId = Number(modeId);
+        if (!this.strobeModeIds.includes(modeId)) enabled = false;
         const settings = this.getSettings();
         if (!settings.strobeEnabled) {
             settings.strobeEnabled = {};
         }
-        settings.strobeEnabled[modeId] = enabled;
+        if (enabled) settings.strobeEnabled[modeId] = true;
+        else delete settings.strobeEnabled[modeId];
         return this.saveSettings(settings);
     },
     
@@ -137,7 +193,7 @@ const Storage = {
     
     exportData() {
         return {
-            version: 3,
+            version: 5,
             exportDate: new Date().toISOString(),
             stats: this.getStats(),
             settings: this.getSettings()
@@ -145,11 +201,12 @@ const Storage = {
     },
     
     importData(data) {
+        const legacyIds = Number(data.version || 3) < 4;
         if (data.stats) {
-            this.saveStats(data.stats);
+            this.saveStats(legacyIds ? this._remapLegacyStats(data.stats) : data.stats);
         }
         if (data.settings) {
-            this.saveSettings(data.settings);
+            this.saveSettings(legacyIds ? this._remapLegacySettings(data.settings) : data.settings);
         }
         return true;
     }
