@@ -677,20 +677,30 @@ window.TrainingRange3D = class TrainingRange3D {
 
     if (id === 2 && state.target) {
       const target = state.target;
-      const object = this.createOrb('m2', 0xa9e4ee);
+      // Keep both states bright, but use a strong cool/warm split so radial
+      // tracking progress remains readable against the neutral range walls.
+      const restingColor = 0x65d7ff;
+      const trackedColor = 0xffd43b;
+      const object = this.createOrb('m2', restingColor);
       const position = toWorld(target.x, target.y, target.z);
       const targetScale = target.size / 57;
       const progress = state.trackProgress / Math.max(0.001, mode.param('lockTime'));
-      this._paintRadialProgress(object, progress, 0xa9e4ee, 0xc9f4cf);
       const core = object.getObjectByName('core');
-      if (core?.material?.emissive) core.material.emissive.setHex(0x9fd9e2);
-      if (core?.material) core.material.toneMapped = false;
+      if (core && !core.userData.mode2Unlit) {
+        core.material.dispose();
+        core.material = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          vertexColors: true,
+          toneMapped: false,
+        });
+        core.userData.mode2Unlit = true;
+      }
+      this._paintRadialProgress(object, progress, restingColor, trackedColor);
       this.show('m2', position, Math.max(0.003, targetScale));
       object.traverse(child => {
         if (!child.material) return;
-        child.material.transparent = true;
-        child.material.opacity = 0.9 + clamp01(progress) * 0.08;
-        child.material.emissiveIntensity = 0.2 + clamp01(progress) * 0.45;
+        child.material.transparent = false;
+        child.material.opacity = 1;
       });
     }
 
