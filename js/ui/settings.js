@@ -190,19 +190,43 @@ function updateCrosshairScale(value) {
 function updateCrosshairPreview() {
     const canvas = document.getElementById('crosshair-preview-canvas');
     if (!canvas) return;
-    
+
+    // The settings modal is display:none while closed. Drawing before it is
+    // visible creates a tiny fallback bitmap that CSS later stretches. Only
+    // render once the canvas has a real layout size, and match the backing
+    // store to devicePixelRatio so the preview stays sharp on HiDPI screens.
+    const bounds = canvas.getBoundingClientRect();
+    const w = Math.round(bounds.width);
+    const h = Math.round(bounds.height);
+    if (w <= 0 || h <= 0) return;
+
+    const pixelRatio = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const backingWidth = Math.round(w * pixelRatio);
+    const backingHeight = Math.round(h * pixelRatio);
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
+
     const ctx = canvas.getContext('2d');
-    const w = canvas.parentElement?.clientWidth || 200;
-    const h = 80;
-    canvas.width = w;
-    canvas.height = h;
-    
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+
     // Background
     ctx.fillStyle = '#0a0a0f';
     ctx.fillRect(0, 0, w, h);
-    
+
     // Draw crosshair preview
     drawCrosshairAt(ctx, w / 2, h / 2, settings.crosshair, settings.crosshairScale);
+
+    if (!canvas._crosshairPreviewObserver && typeof ResizeObserver !== 'undefined') {
+        canvas._crosshairPreviewObserver = new ResizeObserver(entries => {
+            const entry = entries[0];
+            if (entry?.contentRect.width > 0 && entry.contentRect.height > 0) {
+                updateCrosshairPreview();
+            }
+        });
+        canvas._crosshairPreviewObserver.observe(canvas);
+    }
 }
 
 function drawCrosshairAt(ctx, x, y, style, scale) {

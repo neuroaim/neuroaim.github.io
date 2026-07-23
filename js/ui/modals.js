@@ -131,9 +131,11 @@ const Modals = {
      */
     showSettings() {
         if (typeof updateSettingsUI === 'function') updateSettingsUI();
-        if (typeof updateCrosshairPreview === 'function') updateCrosshairPreview();
         if (typeof updateStrobeToggles === 'function') updateStrobeToggles();
         this.show('settings-modal');
+        requestAnimationFrame(() => {
+            if (typeof updateCrosshairPreview === 'function') updateCrosshairPreview();
+        });
     },
     
     /**

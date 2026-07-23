@@ -100,11 +100,15 @@ function closeInfoModal() {
 // ===== SETTINGS MODAL =====
 function showSettings() {
     if (typeof updateSettingsUI === 'function') updateSettingsUI();
-    if (typeof updateCrosshairPreview === 'function') updateCrosshairPreview();
     updateStrobeToggles();
     
     const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.remove('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            if (typeof updateCrosshairPreview === 'function') updateCrosshairPreview();
+        });
+    }
 }
 
 function closeSettings() {

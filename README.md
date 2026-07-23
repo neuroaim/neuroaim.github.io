@@ -1,104 +1,175 @@
-# Neuro-Aim: A web-based FPS aim trainer designed with specialized training modes.
+# Neuro-Aim
 
-## Local run
+Neuro-Aim 是一个直接在浏览器中运行的 3D FPS 视觉与瞄准训练器。训练会根据你的表现自动调整难度，你只需要选择项目并开始训练。
 
-Run `npx http-server -p 8080` in this directory and open
-`http://localhost:8080`. The WebGL range ships with a local Three.js r185 build,
-so no build step or external 3D asset host is needed. Mode 4 is **Target Lock**:
-left click identifies a left-facing head gap; right click identifies a right-facing gap.
+## 在线使用
 
-## View and mouse calibration
+打开：[neuroaim.github.io](https://neuroaim.github.io)
 
-The 3D camera uses Counter-Strike's Hor+ standard: 90° horizontal at 4:3,
-which is 106.26° horizontal / 73.74° vertical at 16:9. The settings panel
-accepts hip-fire sensitivity values for Counter-Strike 2, Valorant, modern
-Call of Duty / Warzone, Overwatch 2, Marvel Rivals, Apex Legends, and Rainbow
-Six Siege with its default `MouseSensitivityMultiplierUnit=0.02`. Switching the
-game profile converts the displayed number while preserving the same physical
-360° turn. ADS and zoom multipliers remain game-specific and are not applied.
+建议使用桌面版 Chrome 或 Edge，并准备一只鼠标。进入训练前可以切换浏览器全屏，减少界面干扰。
 
-## Per-mode physical range layout
+## 快速开始
 
-Every mode rebuilds the clear shooting lane around its own training purpose.
-The target's calibrated angular size and hit tolerance remain unchanged; the
-floor perspective, lighting, backstop, and physical target plane use the real
-distances below. There are no close booth dividers or cross-lane rails.
+1. 打开首页。
+2. 如有需要，在右上角切换中文或英文。
+3. 点击一个训练项目卡片。
+4. 在训练画面中单击一次，让浏览器锁定鼠标。
+5. 倒计时结束后开始训练。
+6. 完成一局后查看结果，选择重新训练或返回首页。
 
-| Mode | Target plane | Backstop | Room width |
-| --- | ---: | ---: | ---: |
-| 1 — Gabor Scout | 12 m | 13.5 m | 16 m |
-| 2 — Pure Tracking | 15 m | 20 m | 24 m |
-| 3 — No Crosshair Shooting | 13.4–13.7 m (wall-mounted) | 14 m | 20 m |
-| 4 — Target Lock | 14 m | 19 m | 42–50 m* |
-| 5 — Peripheral Pop | 11 m | 16 m | 20 m |
-| 6 — Cognitive Switch | 13 m | 18 m | 22 m |
-| 7 — Horizontal Tracking | 10.5–21 m | 22 m | 26 m |
+训练过程中按 `Esc` 可以释放鼠标并暂停。准备继续时，按照页面提示重新单击训练画面。
 
-\* Target Lock is wider because its dynamic peripheral drill places enemies in
-all eight peripheral screen regions. Width adapts to the viewport; depth stays
-compact.
+## 基本操作
 
-## 🚀 How to Access
+| 操作 | 作用 |
+| --- | --- |
+| 移动鼠标 | 移动视角和瞄准方向 |
+| 鼠标左键 | 射击或选择左向答案 |
+| 鼠标右键 | 在 Target Lock 中选择右向答案 |
+| `Esc` | 暂停并释放鼠标 |
 
-Simply visit the website to start training:
-**[neuroaim.github.io](https://neuroaim.github.io)**
+## 训练项目
 
----
+### Mode 01：Gabor 侦察
 
-## 🎮 Gameplay Guide
+一组带纹理的训练球会同时出现。
 
-### **Mode 01: Gabor Scout**
-* **Goal:** A group of patterned training balls appears downrange.
-* **Action:** Find and click the ball with **vertical stripes**.
+- 找出带竖向条纹的目标球。
+- 将准星移到目标上并单击。
+- 注意观察球体本身的纹理方向，不要只依赖颜色或位置。
 
-### **Mode 02: Pure Tracking**
-* **Goal:** Follow the moving sphere with your crosshair.
-* **Action:** Keep tracking while the completed area spreads from the sphere's center across its surface.
+### Mode 02：纯粹追踪
 
-### **Mode 03: No Crosshar Shooting**
-* **Goal:** Hit targets appearing randomly on the screen.
-* **Action:** There is **no crosshair** in this mode. You must rely on your sense to aim and click the targets.
+持续追踪运动中的训练球。
 
-### **Mode 04: Target Lock**
-* **Goal:** Fixate the flashing center dot, then acquire the head of a fixed-size procedural target in one of eight balanced peripheral zones.
-* **Action:** After the probe/noise sequence, use **left click** for a left-facing gap and **right click** for a right-facing gap. The 60-second drill adapts symbol delay, duration, and distractor complexity; response speed is not scored.
+- 将准星稳定保持在球体上。
+- 不需要点击射击。
+- 命中进度会从球体中心向外扩散，完成后自动进入下一个目标。
+- 可以在首页卡片上开启频闪训练。
 
-### **Mode 05: Peripheral Pop**
-* **Goal:** Acquire and click each ball before it disappears.
-* **Action:** One ball appears at a time inside a fixed 30° total circular acquisition cone around the range center. A hit succeeds; a missed click or expired ball fails. Higher difficulty reduces both target size and lifetime.
+### Mode 03：无准星射击
 
-### **Mode 06: Cognitive Switch**
-* **Goal:** Shoot targets based on the current rule.
-* **Action:** Read the HUD instruction at the bottom:
-    * **"SHOOT GREEN"**: Only click green spheres.
-    * **"SHOOT RED"**: Only click red spheres.
-    * *Note: The rule will switch periodically.*
+训练不依赖准星完成拉枪和击发。
 
-### **Mode 07: Horizontal Tracking**
+- 开局时准星会正常显示，随后逐渐淡出。
+- 目标球会贴在前方墙面上刷新。
+- 每次射击都会在球体或墙面留下明显弹孔。
+- 使用上一发弹孔判断当前枪口落点，再完成下一次拉枪。
 
-* **Goal:** Follow a near, middle, or far moving training dummy with your crosshair.
-* **Action:** Keep tracking to accumulate progress. The dummy brightens from its own material and is automatically eliminated at full progress.
+### Mode 04：Target Lock
 
----
+训练从中央注视快速转移到目标头部并辨认细节。
 
-## ⚡ Strobe Training (Advanced, super useful for Mode 2 and 7)
+- 先盯住屏幕中央闪烁的点。
+- 人物出现后，迅速将视线转移到人物头部。
+- 观察头部缺口环的开口方向。
+- 开口朝左按鼠标左键，开口朝右按鼠标右键。
+- 回答速度不会直接计入成绩，重点是稳定看清方向。
 
-> **⚠️ SAFETY WARNING**
-> **Do NOT use this feature if you have a family history of photosensitive epilepsy or sensitivity to flashing lights.**
-> If you experience dizziness, blurred vision, eye twitching, or disorientation, **STOP IMMEDIATELY**.
+### Mode 05：周边闪击
 
-Strobe training occludes vision intermittently to force the brain to predict target movement.
+训练快速发现并击中短暂出现的目标。
 
-### **1. In-Game Strobe**
-* Go to **SETTINGS** -> **STROBE TRAINING**.
-* Toggle the checkbox for supported modes. Target Lock (M4) uses its own dynamic visual protocol and never enables strobe.
+- 训练球会在场景中央周围随机出现。
+- 在目标消失前完成瞄准和射击。
+- 点击落空或未及时击中都会判定失败。
 
-### **2. External Tool (Strobe.exe)**
-For a global effect that works over any application, use the standalone `Strobe.exe`.
+### Mode 06：认知切换
 
-* **Requirement:** Your game or Aim Trainer must be in **Borderless Window** or **Windowed** mode (not Exclusive Fullscreen) for the overlay to be visible.
-* **How to Use:**
-    1.  Download Strobe.exe and run it.
-    2.  Press **F9** or click **START** to toggle the strobe effect on/off.
-    3.  Adjust **Frequency (Hz)** (flashes per second) and **Duty Cycle (%)** (visibility duration) via the control panel sliders.
-    4.  The overlay is click-through and will not interfere with your mouse input.
+根据当前规则选择正确颜色的目标，同时抑制错误射击。
+
+- 留意画面下方显示的当前规则。
+- 显示“射击红色”时只射击红色目标。
+- 显示“射击绿色”时只射击绿色目标。
+- 规则变化后立即按照新规则行动。
+- 不要射击当前规则要求忽略的颜色。
+
+### Mode 07：水平追踪
+
+持续追踪左右移动的训练假人。
+
+- 假人可能出现在不同距离。
+- 将准星稳定保持在人物身上。
+- 不需要点击射击，追踪完成后目标会自动更换。
+- 可以在首页卡片上开启频闪训练。
+
+## 频闪训练
+
+频闪只用于以下两个持续追踪项目：
+
+- Mode 02：纯粹追踪
+- Mode 07：水平追踪
+
+开始训练前，直接使用对应首页卡片右下角的“频闪”开关。其他训练项目不提供频闪模式。
+
+> **安全提示：** 如果你患有光敏性癫痫、对闪光敏感，或有相关家族病史，请勿开启频闪。训练中如果出现头晕、视线模糊、眼部不适或方向感异常，请立即停止。
+
+## 设置
+
+点击首页的“设置”可以调整：
+
+- 声音和音量
+- 当前游戏及鼠标灵敏度
+- 准星样式和大小
+
+如果你平时游玩支持列表中的 FPS 游戏，选择对应游戏并填写自己常用的灵敏度即可。频闪开关位于 Mode 02 和 Mode 07 的首页卡片，不在设置页面中。
+
+## 查看训练记录
+
+点击首页的“统计数据”进入训练历史。
+
+- “总览”展示训练次数、训练时长、活跃天数和各项目成长趋势。
+- 点击项目标签可以查看该项目的等级成长、正确率和相关辅助指标。
+- Mode 02 和 Mode 07 可以分别查看普通训练与频闪训练记录。
+- 单局历史会完整保留，点击任意一条记录可以展开详细信息。
+- 使用“导出历史”可以下载自己的训练数据备份。
+- “清空”会永久删除当前浏览器中的训练历史，请谨慎使用。
+
+训练记录保存在当前浏览器中。更换浏览器、清除网站数据或使用隐私模式时，原有记录可能无法继续使用，建议定期导出备份。
+
+## 本地运行
+
+克隆项目：
+
+```bash
+git clone https://github.com/neuroaim/neuroaim.github.io.git
+cd neuroaim.github.io
+```
+
+使用 Python 启动本地服务器：
+
+```bash
+python -m http.server 8080
+```
+
+或者使用 Node.js：
+
+```bash
+npx http-server -p 8080
+```
+
+然后在浏览器中打开：
+
+```text
+http://localhost:8080/
+```
+
+项目不需要构建。请通过本地服务器访问，不要直接双击 `index.html`，否则浏览器可能阻止 3D 模块加载。
+
+## 常见问题
+
+### 点击项目后鼠标没有锁定
+
+再次单击训练画面，并允许浏览器使用指针锁定。浏览器地址栏或权限设置也可能阻止鼠标锁定。
+
+### 3D 场景空白或显示异常
+
+确认浏览器已启用硬件加速和 WebGL，然后刷新页面。仍有问题时尝试使用最新版 Chrome 或 Edge。
+
+### 没有声音
+
+浏览器通常会在用户首次交互前阻止声音播放。单击页面后重新开始训练，并检查设置中的声音与音量选项。
+
+### 灵敏度感觉不一致
+
+确认设置中选择了正确的游戏，并填写该游戏的常用灵敏度。训练时避免同时使用浏览器缩放或操作系统的鼠标加速功能。
