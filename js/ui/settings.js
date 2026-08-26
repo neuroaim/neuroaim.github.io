@@ -17,6 +17,7 @@ function saveSettings() {
 function resetSettings() {
     settings = JSON.parse(JSON.stringify(Storage.defaultSettings));
     Storage.saveSettings(settings);
+    if (settings.soundEnabled && typeof Audio !== 'undefined') Audio.unlock();
     updateSettingsUI();
     updateCrosshairPreview();
 }
@@ -71,6 +72,7 @@ function updateSettingsUI() {
 function updateSetting(key, value) {
     settings[key] = value;
     saveSettings();
+    if (key === 'soundEnabled' && value && typeof Audio !== 'undefined') Audio.unlock();
 }
 
 function formatSensitivity(value, profile = getSensitivityProfile(settings.sensitivityGame)) {

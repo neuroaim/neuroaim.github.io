@@ -4,24 +4,82 @@
 const Audio = {
     ctx: null,
     initialized: false,
+    unlockPromise: null,
     
     init() {
-        if (this.initialized) return;
-        try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx && this.ctx.state !== 'closed') {
             this.initialized = true;
-            console.log('[Audio] Initialized');
+            return true;
+        }
+
+        this.ctx = null;
+        this.initialized = false;
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return false;
+            this.ctx = new AudioContextClass({ latencyHint: 'interactive' });
+            this.initialized = true;
+            console.log(`[Audio] Initialized (${this.ctx.state})`);
+            return true;
         } catch (e) {
             console.warn('[Audio] Web Audio not supported:', e);
+            return false;
+        }
+    },
+
+    async unlock() {
+        const settings = Storage.getSettings();
+        if (!settings.soundEnabled || !this.init()) return false;
+        if (this.ctx.state === 'running') return true;
+        if (this.unlockPromise) return this.unlockPromise;
+
+        const context = this.ctx;
+        try {
+            this.unlockPromise = context.resume()
+                .then(() => {
+                    const ready = this.ctx === context && context.state === 'running';
+                    if (ready) console.log('[Audio] Ready');
+                    return ready;
+                })
+                .catch(error => {
+                    console.warn('[Audio] Resume failed:', error);
+                    return false;
+                })
+                .finally(() => {
+                    this.unlockPromise = null;
+                });
+            return this.unlockPromise;
+        } catch (error) {
+            this.unlockPromise = null;
+            console.warn('[Audio] Resume failed:', error);
+            return false;
         }
     },
     
     play(type) {
         const settings = Storage.getSettings();
-        if (!settings.soundEnabled || !this.ctx) return;
+        if (!settings.soundEnabled || !this.init()) return;
+
+        if (this.ctx.state !== 'running') {
+            this.unlock().then(ready => {
+                const latestSettings = Storage.getSettings();
+                if (ready && latestSettings.soundEnabled) this.playNow(type, latestSettings);
+            });
+            return;
+        }
+
+        this.playNow(type, settings);
+    },
+
+    playNow(type, settings) {
+        if (!this.ctx || this.ctx.state !== 'running') return;
         
         try {
-            const vol = settings.volume || 0.5;
+            const storedVolume = Number(settings.volume);
+            const vol = Number.isFinite(storedVolume)
+                ? Math.max(0, Math.min(1, storedVolume))
+                : 0.5;
+            if (vol <= 0) return;
             
             switch (type) {
                 case 'hit':
@@ -146,13 +204,14 @@ function resetCombo() {
     Combo.reset();
 }
 
-// Auto-init on first user interaction
-document.addEventListener('click', () => {
-    const settings = Storage.getSettings();
-    if (!Audio.initialized && settings.soundEnabled) {
-        Audio.init();
-    }
-}, { once: true });
+// Unlock before UI click handlers and pointer-lock transitions run. Browsers
+// may start Web Audio suspended; resume() must happen inside a user gesture.
+const unlockAudioFromGesture = () => {
+    if (Storage.getSettings().soundEnabled) Audio.unlock();
+};
+
+document.addEventListener('click', unlockAudioFromGesture, { capture: true });
+document.addEventListener('keydown', unlockAudioFromGesture, { capture: true });
 
 // Export for module usage
 if (typeof module !== 'undefined' && module.exports) {
