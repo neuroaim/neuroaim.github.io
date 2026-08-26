@@ -131,7 +131,7 @@ function updateStrobeToggles() {
 }
 
 function toggleModeStrobe(mode, enabled) {
-    if (mode !== 2 && mode !== 7) return;
+    if (![2, 7, 8].includes(mode)) return;
     Storage.setStrobeEnabled(mode, enabled);
 }
 

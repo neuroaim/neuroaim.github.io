@@ -2,13 +2,14 @@
 // Centralized storage management
 
 const Storage = {
-    strobeModeIds: [2, 7],
+    strobeModeIds: [2, 7, 8],
 
     keys: {
         settings: 'neuroaim_settings_v3',
         stats: 'neuroaim_stats_v3',
         language: 'neuroaim_language',
-        contiguousModeMigration: 'neuroaim_contiguous_mode_ids_v1'
+        contiguousModeMigration: 'neuroaim_contiguous_mode_ids_v1',
+        horizontalTrackingSplitMigration: 'neuroaim_horizontal_tracking_split_v1'
     },
     
     // ===== Generic Methods =====
@@ -80,6 +81,39 @@ const Storage = {
             console.warn('[Storage] Mode ID migration failed:', error);
         }
     },
+
+    _remapTrackingSplitSettings(settings) {
+        const migrated = JSON.parse(JSON.stringify(settings || {}));
+        for (const field of ['difficultyLevels', 'strobeEnabled']) {
+            const source = migrated[field] || {};
+            if (Object.prototype.hasOwnProperty.call(source, 7)) {
+                if (!Object.prototype.hasOwnProperty.call(source, 8)) source[8] = source[7];
+                delete source[7];
+            }
+            migrated[field] = source;
+        }
+        return migrated;
+    },
+
+    _remapTrackingSplitStats(stats) {
+        return (Array.isArray(stats) ? stats : []).map(session => ({
+            ...session,
+            mode: Number(session?.mode) === 7 ? 8 : session.mode
+        }));
+    },
+
+    _migrateHorizontalTrackingSplit() {
+        try {
+            if (localStorage.getItem(this.keys.horizontalTrackingSplitMigration)) return;
+            const settings = this.get(this.keys.settings, {});
+            const stats = this.get(this.keys.stats, []);
+            this.set(this.keys.settings, this._remapTrackingSplitSettings(settings));
+            this.set(this.keys.stats, this._remapTrackingSplitStats(stats));
+            localStorage.setItem(this.keys.horizontalTrackingSplitMigration, '1');
+        } catch (error) {
+            console.warn('[Storage] Horizontal tracking split migration failed:', error);
+        }
+    },
     
     // ===== Settings =====
     
@@ -106,6 +140,7 @@ const Storage = {
     
     getSettings() {
         this._migrateLegacyModeIds();
+        this._migrateHorizontalTrackingSplit();
         const saved = this.get(this.keys.settings, {});
         return this._sanitizeSettings(deepMerge(this.defaultSettings, saved));
     },
@@ -124,6 +159,7 @@ const Storage = {
     
     getStats() {
         this._migrateLegacyModeIds();
+        this._migrateHorizontalTrackingSplit();
         return this.get(this.keys.stats, []);
     },
     
@@ -193,7 +229,7 @@ const Storage = {
     
     exportData() {
         return {
-            version: 5,
+            version: 6,
             exportDate: new Date().toISOString(),
             stats: this.getStats(),
             settings: this.getSettings()
@@ -201,12 +237,16 @@ const Storage = {
     },
     
     importData(data) {
-        const legacyIds = Number(data.version || 3) < 4;
+        const version = Number(data.version || 3);
+        const legacyIds = version < 4;
+        const splitTrackingIds = version < 6;
         if (data.stats) {
-            this.saveStats(legacyIds ? this._remapLegacyStats(data.stats) : data.stats);
+            const legacyStats = legacyIds ? this._remapLegacyStats(data.stats) : data.stats;
+            this.saveStats(splitTrackingIds ? this._remapTrackingSplitStats(legacyStats) : legacyStats);
         }
         if (data.settings) {
-            this.saveSettings(legacyIds ? this._remapLegacySettings(data.settings) : data.settings);
+            const legacySettings = legacyIds ? this._remapLegacySettings(data.settings) : data.settings;
+            this.saveSettings(splitTrackingIds ? this._remapTrackingSplitSettings(legacySettings) : legacySettings);
         }
         return true;
     }

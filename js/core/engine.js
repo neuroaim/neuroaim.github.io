@@ -268,7 +268,7 @@ const GameEngine = {
         
         this.modeId = modeId;
         if (this.range) this.range.setModeProfile(modeId);
-        this.strobeEnabled = [2, 7].includes(modeId) && Storage.isStrobeEnabled(modeId);
+        this.strobeEnabled = [2, 7, 8].includes(modeId) && Storage.isStrobeEnabled(modeId);
         this.difficulty = Storage.getDifficultyLevel(modeId, this.strobeEnabled);
         const lockInstructions = document.getElementById('target-lock-instructions');
         if (lockInstructions) {

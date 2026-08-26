@@ -1,14 +1,29 @@
 // ==================== MODE 7: HORIZONTAL TRACKING ====================
 // Vertical bar left-right tracking mode with Inertial Strafe physics
 
+const MODE7_CS_REFERENCE_SPEED = 250;
+
 class VerticalBarTrackingMode extends BaseMode {
     static ID = 7;
     static COLOR = '#ff6600';
     static PARAMS = {
         barWidth:        { min: 50, mid: 30, max: 10 },
         barHeight:       { min: 300, mid: 300, max: 300 },
-        moveSpeed:       { min: 2, mid: 10, max: 25 },
-        lockTime:        { min: 0.7, mid: 1, max: 1.5 },
+        csSpeedMultiplier: { min: 0.5, mid: 1.2, max: 3 },
+        // Two thirds of the previous 0.7 / 1.0 / 1.5 second thresholds.
+        lockTime:        { min: 7 / 15, mid: 2 / 3, max: 1 },
+        // Base timing is stretched by oscillationDistanceMultiplier so the
+        // target covers more ground without exceeding its CS-calibrated speed.
+        oscillationHalfPeriod: { min: 225, mid: 140, max: 90 },
+        oscillationDuration:   { min: 450, mid: 420, max: 360 },
+        oscillationDistanceMultiplier: { min: 2, mid: 2.25, max: 2.75 },
+        traverseDuration:      { min: 200, mid: 230, max: 260 },
+        movementPauseDuration: { min: 200, mid: 150, max: 100 },
+        acceleration:          { min: 0.28, mid: 0.4, max: 0.58 },
+        // The player's lane movement stays close to the spawn point. These
+        // values are world metres and full-cycle milliseconds respectively.
+        playerSwayAmplitude:   { min: 0.12, mid: 0.20, max: 0.32 },
+        playerSwayPeriod:      { min: 1400, mid: 1000, max: 700 },
         // Note: curveComplexity is less relevant now but kept for compatibility
         curveComplexity: { min: 1, mid: 6, max: 10 }, 
         killTimeout:     2500
@@ -22,14 +37,20 @@ class VerticalBarTrackingMode extends BaseMode {
             totalTrackTime: 0,
             
             // Physics State for Inertial Strafing
-            currentVx: 0,       // Current velocity (with inertia)
-            targetVx: 0,        // Desired velocity (instant)
+            currentVx: 0,       // Current velocity in CS units per second
+            targetVx: 0,        // Desired velocity in CS units per second
             moveDir: 1,         // 1 for Right, -1 for Left
-            timeToNextChange: 0,// Timer for the next movement decision
-            acceleration: 0.25  // Inertia factor: Lower = slippery/heavy, Higher = snappy/responsive
-                                // 0.25 simulates a realistic acceleration curve (like Apex/Overwatch)
+            movementPhase: 'pause',
+            phaseTimeRemaining: 0,
+            directionTimeRemaining: 0,
+            pauseTimeRemaining: 0,
+            pendingMovementPhase: 'oscillation',
+            pendingMoveDir: 1,
+            playerSwayPhase: 0,
+            playerLateralOffset: 0
         };
         this.depthBag = [];
+        this.engine.range?.setPlayerLateralOffset(0);
         this.spawnTarget();
     }
 
@@ -70,18 +91,128 @@ class VerticalBarTrackingMode extends BaseMode {
         // Reset physics state on spawn
         this.state.currentVx = 0;
         this.state.targetVx = 0;
-        this.state.timeToNextChange = 0;
         this.state.moveDir = Math.random() < 0.5 ? 1 : -1;
+        this.startOscillation();
         
         this.state.trackProgress = 0;
         this.state.isLocked = false;
         this.state.totalTrackTime = 0;
         this.startTrial();
     }
+
+    movementSpeed(target) {
+        return MODE7_CS_REFERENCE_SPEED * this.param('csSpeedMultiplier') * target.depthRatio;
+    }
+
+    oscillationStrokeDuration() {
+        return this.param('oscillationHalfPeriod') * this.param('oscillationDistanceMultiplier');
+    }
+
+    oscillationBurstDuration() {
+        return this.param('oscillationDuration') * this.param('oscillationDistanceMultiplier');
+    }
+
+    setOscillationVelocity(target) {
+        this.state.targetVx = this.movementSpeed(target) * this.state.moveDir;
+    }
+
+    pauseBeforeMovement(nextPhase, direction) {
+        this.state.movementPhase = 'pause';
+        this.state.pauseTimeRemaining = this.param('movementPauseDuration');
+        this.state.pendingMovementPhase = nextPhase;
+        this.state.pendingMoveDir = Math.sign(direction) || 1;
+        this.state.targetVx = 0;
+    }
+
+    resumeMovement() {
+        const nextPhase = this.state.pendingMovementPhase;
+        const direction = this.state.pendingMoveDir;
+        this.state.pauseTimeRemaining = 0;
+
+        if (nextPhase === 'oscillation-turn') {
+            this.state.movementPhase = 'oscillation';
+            this.state.moveDir = direction;
+            this.state.directionTimeRemaining = this.oscillationStrokeDuration();
+            this.setOscillationVelocity(this.state.target);
+        } else if (nextPhase === 'traverse') {
+            this.startTraverse(direction, false);
+        } else {
+            this.startOscillation(direction, false);
+        }
+    }
+
+    startOscillation(forcedDirection = 0, pauseFirst = true) {
+        const target = this.state.target;
+        if (!target) return;
+        const direction = forcedDirection ? Math.sign(forcedDirection) : this.state.moveDir;
+        if (pauseFirst) {
+            this.pauseBeforeMovement('oscillation', direction);
+            return;
+        }
+        this.state.movementPhase = 'oscillation';
+        this.state.phaseTimeRemaining = this.oscillationBurstDuration();
+        this.state.directionTimeRemaining = this.oscillationStrokeDuration();
+        this.state.moveDir = direction;
+        this.setOscillationVelocity(target);
+    }
+
+    startTraverse(forcedDirection = 0, pauseFirst = true) {
+        const target = this.state.target;
+        if (!target) return;
+        const limitX = 720 * target.depthRatio;
+        let direction = forcedDirection ? Math.sign(forcedDirection) : this.state.moveDir;
+        // Travel inward near a wall; otherwise continue the final stroke of
+        // the oscillation burst so the phase transition remains readable.
+        if (!forcedDirection && target.x > limitX * 0.5) direction = -1;
+        else if (!forcedDirection && target.x < -limitX * 0.5) direction = 1;
+        if (pauseFirst) {
+            this.pauseBeforeMovement('traverse', direction);
+            return;
+        }
+
+        this.state.movementPhase = 'traverse';
+        this.state.phaseTimeRemaining = this.param('traverseDuration');
+        this.state.directionTimeRemaining = 0;
+        this.state.moveDir = direction;
+        this.state.targetVx = this.movementSpeed(target) * this.state.moveDir;
+    }
+
+    updateMovementPlan(target, dt) {
+        if (this.state.movementPhase === 'pause') {
+            this.state.pauseTimeRemaining -= dt;
+            this.state.targetVx = 0;
+            if (this.state.pauseTimeRemaining <= 0) this.resumeMovement();
+            return;
+        }
+
+        this.state.phaseTimeRemaining -= dt;
+
+        if (this.state.movementPhase === 'oscillation') {
+            this.state.directionTimeRemaining -= dt;
+            if (this.state.phaseTimeRemaining <= 0) this.startTraverse();
+            else if (this.state.directionTimeRemaining <= 0) {
+                this.pauseBeforeMovement('oscillation-turn', -this.state.moveDir);
+            }
+            return;
+        }
+
+        if (this.state.phaseTimeRemaining <= 0) this.startOscillation();
+    }
     
     update(dt) {
         const t = this.state.target;
         if (!t) return;
+
+        // Move the player laterally on a bounded sine path. A position curve
+        // (instead of accumulating velocity) guarantees the camera never
+        // drifts away from the range origin during a long session.
+        const swayPeriod = Math.max(1, this.param('playerSwayPeriod'));
+        this.state.playerSwayPhase = (
+            this.state.playerSwayPhase + Math.PI * 2 * dt / swayPeriod
+        ) % (Math.PI * 2);
+        this.state.playerLateralOffset = Math.sin(this.state.playerSwayPhase)
+            * this.param('playerSwayAmplitude');
+        this.engine.range?.setPlayerLateralOffset(this.state.playerLateralOffset);
         
         // Timeout check
         const age = this.now() - t.spawnTime;
@@ -91,76 +222,58 @@ class VerticalBarTrackingMode extends BaseMode {
             return;
         }
         
-        // ==================== NEW: INERTIAL STRAFE LOGIC ====================
-        // Simulates realistic AD strafing: Decision -> Inertia -> Movement
-        
-        this.state.timeToNextChange -= dt;
-        
-        // 1. Decision Layer (The Brain)
-        // Determines WHERE to go next based on random intervals
-        if (this.state.timeToNextChange <= 0) {
-            // Randomly decide to switch direction (70% chance)
-            if (Math.random() < 0.7) {
-                this.state.moveDir *= -1;
-            }
-            
-            // Set new Target Velocity (Full speed)
-            // Multiplier adds slight variance to walk speed (0.8x to 1.2x)
-            const baseSpeed = this.param('moveSpeed') * 2.5 * t.depthRatio;
-            const randomSpeedMult = 0.8 + Math.random() * 0.4;
-            
-            this.state.targetVx = baseSpeed * this.state.moveDir * randomSpeedMult;
-            
-            // Set time until next decision
-            // Short intervals = fast strafes, Long intervals = long tracking
-            const minTime = 250;
-            const maxTime = 1250;
-            this.state.timeToNextChange = minTime + Math.random() * (maxTime - minTime);
-        }
+        // Fixed cadence: oscillation burst -> horizontal travel -> oscillation.
+        // Difficulty shortens the half-period, so each level produces a
+        // predictable increase in reversal frequency instead of random turns.
+        this.updateMovementPlan(t, dt);
         
         // 2. Physics Layer (The Body)
         // Simulates acceleration/deceleration. 
         // We do not instantly snap to targetVx; we interpolate towards it.
         // This gives the "weight" feeling that trains the cerebellum.
-        const accel = this.state.acceleration;
+        const accel = this.param('acceleration');
         
         // Simple Lerp: current += (target - current) * fraction
         const frameIndependentAlpha = 1 - Math.pow(1 - accel, dt / 16.67);
         this.state.currentVx += (this.state.targetVx - this.state.currentVx) * frameIndependentAlpha;
         
         // 3. Apply Movement
-        // Scale by dt/16.67 to maintain consistency with frame rates
-        t.x += this.state.currentVx * (dt / 16.67);
+        // Velocities use CS-style units/second; dt converts them to displacement.
+        t.x += this.state.currentVx * (dt / 1000);
         
         // 4. Wall Collisions (with bounce damping)
         const limitX = 720 * t.depthRatio;
         if (t.x < -limitX) {
             t.x = -limitX;
-            this.state.moveDir = 1; // Force Right
-            this.state.targetVx = Math.abs(this.state.targetVx);
-            this.state.currentVx *= -0.5; // Lose 50% kinetic energy on bounce
-            this.state.timeToNextChange = 500 + Math.random() * 500;
+            this.state.currentVx = 0;
+            this.startOscillation(1);
         }
         if (t.x > limitX) {
             t.x = limitX;
-            this.state.moveDir = -1; // Force Left
-            this.state.targetVx = -Math.abs(this.state.targetVx);
-            this.state.currentVx *= -0.5; // Lose 50% kinetic energy on bounce
-            this.state.timeToNextChange = 500 + Math.random() * 500;
+            this.state.currentVx = 0;
+            this.startOscillation(-1);
         }
         
         // ====================================================================
         
-        // Tracking Logic - Only checking X-axis distance
-        const res = this.getDistanceFromCrosshair(t.x, t.y, t.z);
-        const trackRadius = t.width / 2 + 20;
+        // Sync the current-frame dummy transform before raycasting. Tracking
+        // counts only when the center ray intersects the rendered silhouette;
+        // empty space inside the old circular tolerance no longer qualifies.
+        let trackingProgressMultiplier = 0;
+        if (this.engine.range?.getReticleTargetSilhouettePart) {
+            this.engine.range.syncMode(7, this.state, this);
+            const silhouettePart = this.engine.range.getReticleTargetSilhouettePart('m7-dummy');
+            trackingProgressMultiplier = silhouettePart === 'head' ? 1.5 : (silhouettePart ? 1 : 0);
+        } else {
+            const res = this.getDistanceFromCrosshair(t.x, t.y, t.z);
+            trackingProgressMultiplier = res.dist <= t.width / 2 ? 1 : 0;
+        }
         const lockTime = this.param('lockTime');
-        
-        // Note: Since this is a vertical bar, we mostly care about horizontal proximity
-        // Using a slightly wider tolerance for the bar shape
-        if (res.dist <= trackRadius * 3) { 
-            // Progress only increases (accumulates)
-            this.state.trackProgress += dt / 1000;
+
+        if (trackingProgressMultiplier > 0) {
+            // Head tracking fills the lock meter 50% faster. Real elapsed
+            // tracking time remains unweighted for session statistics.
+            this.state.trackProgress += (dt / 1000) * trackingProgressMultiplier;
             this.state.totalTrackTime += dt / 1000;
             
             if (this.state.trackProgress >= lockTime) {
@@ -236,6 +349,7 @@ class VerticalBarTrackingMode extends BaseMode {
     }
     
     cleanup() {
+        this.engine.range?.setPlayerLateralOffset(0);
         this.state.target = null;
     }
 }

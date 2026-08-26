@@ -3,7 +3,7 @@
 
 class BaseMode {
     // ===== Static Properties (Override in subclass) =====
-    static ID = 0;           // Mode number (1-7)
+    static ID = 0;           // Mode number (1-8)
     static COLOR = '#ffffff'; // Mode theme color
     static PARAMS = {};       // Difficulty parameters {min, mid, max}
     

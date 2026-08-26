@@ -21,7 +21,8 @@ const CFG = {
         4: { targetDistance: 14, wallDistance: 19, roomWidth: 42 }, // Peripheral protocol exception
         5: { targetDistance: 11, wallDistance: 16, roomWidth: 20 }, // Peripheral room
         6: { targetDistance: 13, wallDistance: 18, roomWidth: 22 }, // Switch lane
-        7: { targetDistance: 17, wallDistance: 22, roomWidth: 26 }  // Dummy lane
+        7: { targetDistance: 17, wallDistance: 22, roomWidth: 26 }, // Dual-strafe lane
+        8: { targetDistance: 17, wallDistance: 22, roomWidth: 26 }  // Legacy dummy lane
     },
     
     // Camera calibration. Counter-Strike exposes a 90 degree horizontal view

@@ -140,7 +140,7 @@
         if (!container) return;
 
         // 获取所有模式ID
-        const modeIds = (typeof ModeRegistry !== 'undefined') ? ModeRegistry.getAllIds() : [1,2,3,4,5,6,7];
+        const modeIds = (typeof ModeRegistry !== 'undefined') ? ModeRegistry.getAllIds() : [1,2,3,4,5,6,7,8];
         
         let html = '';
         
@@ -149,7 +149,7 @@
             const name = info.name || `Mode ${id}`;
             const desc = info.description || '';
             const tag = info.tag || '';
-            const supportsStrobe = id === 2 || id === 7;
+            const supportsStrobe = [2, 7, 8].includes(id);
             const isStrobe = supportsStrobe && Storage.isStrobeEnabled(id);
             const strobeControl = supportsStrobe ? `
                 <label class="mode-strobe-toggle" onclick="event.stopPropagation()">
@@ -174,7 +174,7 @@
     window.renderModeCards = renderModeCards;
     window.toggleHomeStrobe = function toggleHomeStrobe(modeId, enabled) {
         modeId = Number(modeId);
-        if (modeId !== 2 && modeId !== 7) return;
+        if (![2, 7, 8].includes(modeId)) return;
         Storage.setStrobeEnabled(modeId, Boolean(enabled));
         if (typeof settings === 'object') {
             if (!settings.strobeEnabled) settings.strobeEnabled = {};

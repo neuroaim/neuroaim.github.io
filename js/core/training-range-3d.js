@@ -39,6 +39,7 @@ window.TrainingRange3D = class TrainingRange3D {
     this.ruleLights = [];
     this.ruleLightFixtures = [];
     this.labels = new Map();
+    this.reticleRaycaster = new THREE.Raycaster();
     this.statusElement = document.getElementById('mode-status-text');
     this.modeId = 1;
     this.rangeProfile = this._profileForMode(this.modeId);
@@ -197,6 +198,7 @@ window.TrainingRange3D = class TrainingRange3D {
     this.rangeProfile = profile;
     this.trainingDepthScale = profile.targetDistance / LEGACY_REFERENCE_DISTANCE;
     this.clearLatestShotImpact();
+    if (modeId !== 7) this.setPlayerLateralOffset(0);
     if (shellChanged) this._buildRange(profile);
   }
 
@@ -247,6 +249,15 @@ window.TrainingRange3D = class TrainingRange3D {
     // X inversion in legacyToWorld so positive legacy X appears on-screen right
     // and positive mouse movement aims toward it, matching the 2D baseline.
     this.camera.rotation.set(-pitch, Math.PI - yaw, 0, 'YXZ');
+  }
+
+  setPlayerLateralOffset(offset = 0) {
+    const lateralOffset = Number(offset);
+    this.camera.position.set(
+      Number.isFinite(lateralOffset) ? lateralOffset : 0,
+      CAMERA_HEIGHT,
+      0,
+    );
   }
 
   setReticle(visible, opacity = 1, style = 'cross', userScale = 1) {
@@ -375,22 +386,27 @@ window.TrainingRange3D = class TrainingRange3D {
       const group = new THREE.Group();
       const body = this._material(color, 0.12, 0.58, { metalness: 0.08 });
       const joint = this._material(0x1e2b32, 0.03, 0.4, { metalness: 0.55 });
-      const head = this._mesh(new THREE.SphereGeometry(0.18, 18, 14), body, group);
+      const silhouettePart = (mesh, part = 'body') => {
+        mesh.userData.targetSilhouette = true;
+        mesh.userData.targetSilhouettePart = part;
+        return mesh;
+      };
+      const head = silhouettePart(this._mesh(new THREE.SphereGeometry(0.18, 18, 14), body, group), 'head');
       head.position.set(0, 0.8, 0);
       head.name = 'head';
-      const neck = this._mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.13, 12), joint, group);
+      const neck = silhouettePart(this._mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.13, 12), joint, group));
       neck.position.y = 0.61;
       neck.userData.fixedMaterial = true;
-      const torso = this._mesh(new THREE.CapsuleGeometry(0.22, 0.56, 6, 12), body, group);
+      const torso = silhouettePart(this._mesh(new THREE.CapsuleGeometry(0.22, 0.56, 6, 12), body, group));
       torso.position.y = 0.19;
-      const visor = this._mesh(new THREE.BoxGeometry(0.25, 0.09, 0.045), joint, group);
+      const visor = silhouettePart(this._mesh(new THREE.BoxGeometry(0.25, 0.09, 0.045), joint, group), 'head');
       visor.position.set(0, 0.81, -0.155);
       visor.userData.fixedMaterial = true;
       for (const side of [-1, 1]) {
-        const arm = this._mesh(new THREE.CapsuleGeometry(0.065, 0.68, 4, 8), body, group);
+        const arm = silhouettePart(this._mesh(new THREE.CapsuleGeometry(0.065, 0.68, 4, 8), body, group));
         arm.position.set(side * 0.285, 0.08, 0);
         arm.rotation.z = side * 0.1;
-        const leg = this._mesh(new THREE.CapsuleGeometry(0.085, 0.72, 4, 8), body, group);
+        const leg = silhouettePart(this._mesh(new THREE.CapsuleGeometry(0.085, 0.72, 4, 8), body, group));
         leg.position.set(side * 0.115, -0.68, 0);
       }
       const mount = this._mesh(new THREE.BoxGeometry(0.52, 0.055, 0.32), joint, group);
@@ -401,6 +417,21 @@ window.TrainingRange3D = class TrainingRange3D {
     });
     this._setColor(object, color, 0.12);
     return object;
+  }
+
+  isReticleOnTargetSilhouette(id) {
+    return this.getReticleTargetSilhouettePart(id) !== null;
+  }
+
+  getReticleTargetSilhouettePart(id) {
+    const target = this.targets.get(id);
+    if (!target?.visible) return null;
+    this.camera.updateMatrixWorld(true);
+    target.updateMatrixWorld(true);
+    this.reticleRaycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hit = this.reticleRaycaster.intersectObject(target, true)
+      .find(intersection => intersection.object.userData.targetSilhouette === true);
+    return hit?.object.userData.targetSilhouettePart || null;
   }
 
   show(id, position, scale = 1, scaleWithTrainingDepth = true) {
@@ -790,17 +821,18 @@ window.TrainingRange3D = class TrainingRange3D {
       this._setRuleLighting(0x78cfff, 1.15, 0xb9efff, 1.5);
     }
 
-    if (id === 7 && state.target) {
+    if ((id === 7 || id === 8) && state.target) {
       const target = state.target;
       const position = toWorld(target.x, target.y, target.z);
-      this.createDummy('m7-dummy', 0xff7a00);
+      const dummyId = id === 7 ? 'm7-dummy' : 'm8-dummy';
+      this.createDummy(dummyId, 0xff7a00);
       // A fixed 1.80 m adult at every difficulty and distance. Put the head on
       // the mode's horizontal tracking line and let perspective alone control
       // its apparent near/mid/far size.
       const dummyScale = 1.8 / 2.15;
       position[1] = CAMERA_HEIGHT - 0.8 * dummyScale;
       const progress = state.trackProgress / Math.max(0.001, mode.param('lockTime'));
-      const dummy = this.show('m7-dummy', position, dummyScale, false);
+      const dummy = this.show(dummyId, position, dummyScale, false);
       // Difficulty can narrow the tracking tolerance without stretching the
       // visible person. Keep one normal human proportion at every level.
       dummy.scale.setScalar(dummyScale);

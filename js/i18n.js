@@ -9,7 +9,7 @@ const i18n = {
             // Menu Screen
             title: 'NEURO-AIM',
             subtitle: 'Neural-Optimized FPS Aiming Trainer',
-            version: '7 MODES | ADAPTIVE DIFFICULTY',
+            version: '8 MODES | ADAPTIVE DIFFICULTY',
             statistics: 'STATISTICS',
             trainingGuide: 'TRAINING GUIDE',
             settings: 'SETTINGS',
@@ -41,9 +41,13 @@ const i18n = {
             mode6Tag: 'ACC + RULE FLEXIBILITY',
             mode6Desc: 'Rules change with <strong>environment</strong>. Adapt instantly.',
 
-            mode7Name: 'HORIZONTAL TRACKING',
-            mode7Tag: 'CEREBELLUM + PREDICTION',
-            mode7Desc: 'Track a <strong>training dummy</strong> moving smoothly left and right.',
+            mode7Name: 'DUAL-STRAFE TRACKING',
+            mode7Tag: 'RELATIVE MOTION + TRACKING',
+            mode7Desc: 'Track a strafing <strong>training dummy</strong> while your own viewpoint moves near the starting position.',
+
+            mode8Name: 'HORIZONTAL STRAFE TRACKING',
+            mode8Tag: 'CEREBELLUM + PREDICTION',
+            mode8Desc: 'Track a <strong>training dummy</strong> using the original target-only inertial strafe pattern.',
             
             // HUD
             time: 'TIME',
@@ -165,7 +169,7 @@ const i18n = {
             // Menu Screen
             title: 'Neuro-Aim',
             subtitle: '神经科学优化的FPS瞄准训练器',
-            version: '7种模式 | 自适应难度',
+            version: '8种模式 | 自适应难度',
             statistics: '统计数据',
             trainingGuide: '训练指南',
             settings: '设置',
@@ -197,9 +201,13 @@ const i18n = {
             mode6Tag: 'ACC + 规则灵活性',
             mode6Desc: '规则随<strong>环境</strong>变化。立即适应。',
 
-            mode7Name: '水平追踪',
-            mode7Tag: '小脑 + 预测',
-            mode7Desc: '追踪一个左右平滑移动的<strong>训练假人</strong>。',
+            mode7Name: '左右移动追枪',
+            mode7Tag: '相对运动 + 追踪',
+            mode7Desc: '自己在原点附近小幅左右移动，同时追踪左右移动的<strong>训练假人</strong>。',
+
+            mode8Name: '横移追枪',
+            mode8Tag: '小脑 + 预测',
+            mode8Desc: '使用原始的目标单独随机惯性横移节奏，持续追踪<strong>训练假人</strong>。',
             
             // HUD
             time: '时间',

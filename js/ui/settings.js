@@ -58,7 +58,7 @@ function updateSettingsUI() {
     });
     
     // Per-mode strobe toggles - 从 Storage 读取而不是 settings
-    const modeIds = [2, 7];
+    const modeIds = [2, 7, 8];
     for (const mode of modeIds) {
         const strobeEl = document.getElementById(`strobe-mode-${mode}`);
         if (strobeEl) {
@@ -286,7 +286,7 @@ function drawCrosshairAt(ctx, x, y, style, scale) {
 
 // ===== STROBE TOGGLE =====
 function toggleStrobe(mode, enabled) {
-    if (mode !== 2 && mode !== 7) return;
+    if (![2, 7, 8].includes(mode)) return;
     if (!settings.strobeEnabled) settings.strobeEnabled = {};
     settings.strobeEnabled[mode] = enabled;
     saveSettings();
@@ -299,7 +299,7 @@ function toggleStrobe(mode, enabled) {
 
 // 用于HTML中的onchange调用
 function toggleModeStrobe(mode, enabled) {
-    if (mode !== 2 && mode !== 7) return;
+    if (![2, 7, 8].includes(mode)) return;
     Storage.setStrobeEnabled(mode, enabled);
     
     // 同步更新settings对象

@@ -281,7 +281,7 @@ function statsModePrimary(session) {
         label: statsCopy('Switch errors', '切换错误'),
         value: statsFormat(session.switchErrors)
     };
-    if (mode === 2 || mode === 7) return {
+    if (mode === 2 || mode === 7 || mode === 8) return {
         label: statsCopy('Tracking volume', '跟枪时长'),
         value: statsFormat(session.trackingTime, ' s', 1)
     };
@@ -345,7 +345,7 @@ function renderHistoryLedger(sessions) {
 function renderStatsModeCards(stats) {
     return `<div class="mode-progress-grid">${ModeRegistry.getAllIds().map(mode => {
         const sessions = stats.filter(session => Number(session.mode) === mode);
-        const supportsStrobe = mode === 2 || mode === 7;
+        const supportsStrobe = [2, 7, 8].includes(mode);
         const normal = sessions.filter(session => !session.strobe);
         const strobe = sessions.filter(session => session.strobe);
         const primary = supportsStrobe && normal.length ? normal : sessions;
@@ -397,7 +397,7 @@ function renderModeDetail(stats, mode) {
     const modeSessions = stats.filter(session => Number(session.mode) === mode);
     const sessions = statsFilteredModeSessions(stats, mode);
     const trend = statsTrend(sessions);
-    const canStrobe = mode === 2 || mode === 7;
+    const canStrobe = [2, 7, 8].includes(mode);
     const filters = canStrobe ? `<div class="stats-filter-group">${[
         ['all', statsCopy('All', '全部')], ['normal', statsCopy('Normal', '普通')], ['strobe', statsCopy('Strobe', '频闪')]
     ].map(([key, label]) => `<button class="filter-button ${StatsDashboardState.condition === key ? 'active' : ''}" onclick="setStatsCondition('${key}')">${label}</button>`).join('')}</div>` : '';
@@ -446,7 +446,7 @@ function updateStatsDisplay() {
 
 window.switchStatsTab = function switchStatsTab(mode) {
     StatsDashboardState.mode = mode === 'all' ? 'all' : Number(mode);
-    StatsDashboardState.condition = mode === 'all' || ![2, 7].includes(Number(mode)) ? 'all' : 'normal';
+    StatsDashboardState.condition = mode === 'all' || ![2, 7, 8].includes(Number(mode)) ? 'all' : 'normal';
     StatsDashboardState.historyPage = 0;
     document.querySelectorAll('.analytics-tab').forEach(tab => tab.classList.toggle('active', String(tab.dataset.mode) === String(StatsDashboardState.mode)));
     statsRenderCurrent();
