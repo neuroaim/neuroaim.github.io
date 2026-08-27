@@ -43,7 +43,7 @@ const i18n = {
 
             mode7Name: 'DUAL-STRAFE TRACKING',
             mode7Tag: 'RELATIVE MOTION + TRACKING',
-            mode7Desc: 'Track a strafing <strong>training dummy</strong> while your own viewpoint moves near the starting position.',
+            mode7Desc: 'Track shrinking <strong>3D spheres</strong> at varied heights while your lateral movement grows with difficulty.',
 
             mode8Name: 'HORIZONTAL STRAFE TRACKING',
             mode8Tag: 'CEREBELLUM + PREDICTION',
@@ -203,7 +203,7 @@ const i18n = {
 
             mode7Name: '左右移动追枪',
             mode7Tag: '相对运动 + 追踪',
-            mode7Desc: '自己在原点附近小幅左右移动，同时追踪左右移动的<strong>训练假人</strong>。',
+            mode7Desc: '自己在原点附近左右移动，位移随等级增大，同时追踪不同高度、逐渐缩小的<strong>3D小球</strong>。',
 
             mode8Name: '横移追枪',
             mode8Tag: '小脑 + 预测',

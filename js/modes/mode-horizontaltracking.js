@@ -1,14 +1,18 @@
-// ==================== MODE 7: HORIZONTAL TRACKING ====================
-// Vertical bar left-right tracking mode with Inertial Strafe physics
+// ==================== MODE 7: DUAL-STRAFE BALL TRACKING ====================
+// Small-ball tracking with deterministic inertial strafing and player sway.
 
 const MODE7_CS_REFERENCE_SPEED = 250;
+const MODE7_REFERENCE_HEAD_DIAMETER_LEGACY = 21.2755;
+const MODE7_CAMERA_HEIGHT_METERS = 1.65;
+const MODE7_TARGET_DEPTH_METERS = 20;
 
-class VerticalBarTrackingMode extends BaseMode {
+class DualStrafeBallTrackingMode extends BaseMode {
     static ID = 7;
     static COLOR = '#ff6600';
     static PARAMS = {
-        barWidth:        { min: 50, mid: 30, max: 10 },
-        barHeight:       { min: 300, mid: 300, max: 300 },
+        // Preserve the existing difficulty curve while making every ball 1.5x
+        // larger: Lv30 = 2.25 heads, Lv100 = 1.05 and Lv200 = 0.15.
+        targetHeadScale: { min: 363 / 140, mid: 1.05, max: 0.15 },
         csSpeedMultiplier: { min: 0.5, mid: 1.2, max: 3 },
         // Two thirds of the previous 0.7 / 1.0 / 1.5 second thresholds.
         lockTime:        { min: 7 / 15, mid: 2 / 3, max: 1 },
@@ -22,7 +26,7 @@ class VerticalBarTrackingMode extends BaseMode {
         acceleration:          { min: 0.28, mid: 0.4, max: 0.58 },
         // The player's lane movement stays close to the spawn point. These
         // values are world metres and full-cycle milliseconds respectively.
-        playerSwayAmplitude:   { min: 0.12, mid: 0.20, max: 0.32 },
+        playerSwayAmplitude:   { min: 0.30, mid: 0.55, max: 0.75 },
         playerSwayPeriod:      { min: 1400, mid: 1000, max: 700 },
         // Note: curveComplexity is less relevant now but kept for compatibility
         curveComplexity: { min: 1, mid: 6, max: 10 }, 
@@ -49,20 +53,20 @@ class VerticalBarTrackingMode extends BaseMode {
             playerSwayPhase: 0,
             playerLateralOffset: 0
         };
-        this.depthBag = [];
+        this.elevationBag = [];
         this.engine.range?.setPlayerLateralOffset(0);
         this.spawnTarget();
     }
 
-    nextDepth() {
-        if (!this.depthBag.length) {
-            this.depthBag = [
-                { band: 'near', min: 10.5, max: 12.5 },
-                { band: 'mid', min: 15.5, max: 17.5 },
-                { band: 'far', min: 19.5, max: 21.0 }
+    nextElevation() {
+        if (!this.elevationBag.length) {
+            this.elevationBag = [
+                { band: 'low', min: 0.75, max: 1.15 },
+                { band: 'mid', min: 1.45, max: 1.90 },
+                { band: 'high', min: 2.25, max: 2.85 }
             ].sort(() => Math.random() - 0.5);
         }
-        const selected = this.depthBag.pop();
+        const selected = this.elevationBag.pop();
         return {
             band: selected.band,
             meters: selected.min + Math.random() * (selected.max - selected.min)
@@ -70,21 +74,28 @@ class VerticalBarTrackingMode extends BaseMode {
     }
     
     spawnTarget() {
-        const depth = this.nextDepth();
-        const referenceDepth = CFG.rangeProfiles[7].targetDistance;
-        const depthRatio = depth.meters / referenceDepth;
+        const elevation = this.nextElevation();
+        const profile = CFG.rangeProfiles[7];
+        const referenceDepth = profile.targetDistance;
+        const depthMeters = MODE7_TARGET_DEPTH_METERS;
+        const depthRatio = depthMeters / referenceDepth;
         const rangeX = 1440 * depthRatio;
+        const headScale = this.param('targetHeadScale');
+        const legacyMetersPerUnit = referenceDepth / WALL_DISTANCE;
         
         this.state.target = {
             x: (Math.random() - 0.5) * rangeX,
-            y: 0,  // Vertical bar centered vertically
+            y: (MODE7_CAMERA_HEIGHT_METERS - elevation.meters) / legacyMetersPerUnit,
             z: WALL_DISTANCE * depthRatio,
-            depthMeters: depth.meters,
-            depthBand: depth.band,
+            depthMeters,
+            depthBand: 'wall',
+            elevationMeters: elevation.meters,
+            elevationBand: elevation.band,
             depthRatio,
             vx: 0,
-            width: this.param('barWidth'),
-            height: this.param('barHeight'),
+            headScale,
+            width: MODE7_REFERENCE_HEAD_DIAMETER_LEGACY * headScale,
+            height: MODE7_REFERENCE_HEAD_DIAMETER_LEGACY * headScale,
             spawnTime: this.now()
         };
         
@@ -256,14 +267,13 @@ class VerticalBarTrackingMode extends BaseMode {
         
         // ====================================================================
         
-        // Sync the current-frame dummy transform before raycasting. Tracking
-        // counts only when the center ray intersects the rendered silhouette;
-        // empty space inside the old circular tolerance no longer qualifies.
+        // Sync the current-frame ball before raycasting. Tracking counts only
+        // when the center ray intersects the rendered sphere itself.
         let trackingProgressMultiplier = 0;
         if (this.engine.range?.getReticleTargetSilhouettePart) {
             this.engine.range.syncMode(7, this.state, this);
-            const silhouettePart = this.engine.range.getReticleTargetSilhouettePart('m7-dummy');
-            trackingProgressMultiplier = silhouettePart === 'head' ? 1.5 : (silhouettePart ? 1 : 0);
+            const targetPart = this.engine.range.getReticleTargetSilhouettePart('m7-ball');
+            trackingProgressMultiplier = targetPart === 'target' ? 1 : 0;
         } else {
             const res = this.getDistanceFromCrosshair(t.x, t.y, t.z);
             trackingProgressMultiplier = res.dist <= t.width / 2 ? 1 : 0;
@@ -271,8 +281,6 @@ class VerticalBarTrackingMode extends BaseMode {
         const lockTime = this.param('lockTime');
 
         if (trackingProgressMultiplier > 0) {
-            // Head tracking fills the lock meter 50% faster. Real elapsed
-            // tracking time remains unweighted for session statistics.
             this.state.trackProgress += (dt / 1000) * trackingProgressMultiplier;
             this.state.totalTrackTime += dt / 1000;
             
@@ -301,51 +309,8 @@ class VerticalBarTrackingMode extends BaseMode {
         return false;
     }
     
-    draw(ctx) {
-        this.engine.range.syncMode(7, this.state, this); return;
-        const t = this.state.target;
-        if (!t) return;
-
-        // Project 3D position to 2D screen
-        const p = this.project(t.x, t.y, t.z);
-        if (!p.visible) return;
-        
-        const visualWidth = t.width * p.scale;
-        const visualHeight = t.height * p.scale;
-        const lockTime = this.param('lockTime');
-        const progress = this.state.trackProgress / lockTime;
-        
-        const barX = p.x - visualWidth / 2;
-        const barY = p.y - visualHeight / 2;
-        
-        // Draw Bar Body
-        ctx.fillStyle = this.state.isLocked ? '#ff6600' : `rgba(255, 102, 0, ${0.3 + progress * 0.5})`;
-        ctx.fillRect(barX, barY, visualWidth, visualHeight);
-        
-        // Draw Bar Border
-        ctx.strokeStyle = '#ff6600';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(barX, barY, visualWidth, visualHeight);
-        
-        // Draw Progress Bar (at the bottom of the target)
-        if (progress > 0) {
-            const progressBarWidth = visualWidth;
-            const progressBarHeight = 8;
-            const progressY = barY + visualHeight + 15;
-            
-            // Progress Background
-            ctx.fillStyle = 'rgba(255, 102, 0, 0.3)';
-            ctx.fillRect(barX, progressY, progressBarWidth, progressBarHeight);
-            
-            // Progress Fill
-            ctx.fillStyle = this.state.isLocked ? '#ffffff' : '#ff6600';
-            ctx.fillRect(barX, progressY, progressBarWidth * progress, progressBarHeight);
-            
-            // Progress Border
-            ctx.strokeStyle = '#ff6600';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(barX, progressY, progressBarWidth, progressBarHeight);
-        }
+    draw() {
+        this.engine.range.syncMode(7, this.state, this);
     }
     
     cleanup() {
@@ -354,4 +319,4 @@ class VerticalBarTrackingMode extends BaseMode {
     }
 }
 
-ModeRegistry.register(VerticalBarTrackingMode);
+ModeRegistry.register(DualStrafeBallTrackingMode);

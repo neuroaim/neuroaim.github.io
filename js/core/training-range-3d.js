@@ -821,10 +821,40 @@ window.TrainingRange3D = class TrainingRange3D {
       this._setRuleLighting(0x78cfff, 1.15, 0xb9efff, 1.5);
     }
 
-    if ((id === 7 || id === 8) && state.target) {
+    if (id === 7 && state.target) {
       const target = state.target;
       const position = toWorld(target.x, target.y, target.z);
-      const dummyId = id === 7 ? 'm7-dummy' : 'm8-dummy';
+      const object = this.createOrb('m7-ball', 0xff7a00);
+      const core = object.getObjectByName('core');
+      if (core) {
+        core.userData.targetSilhouette = true;
+        core.userData.targetSilhouettePart = 'target';
+      }
+
+      // The previous dummy used a 0.18 m head radius at 1.8 / 2.15 scale.
+      // Scale the 0.38 m base orb from that exact physical head size so the
+      // requested ratio remains correct at every target distance.
+      const referenceHeadRadius = 0.18 * (1.8 / 2.15);
+      const ballScale = (referenceHeadRadius / 0.38) * target.headScale;
+      const progress = state.trackProgress / Math.max(0.001, mode.param('lockTime'));
+      this.show('m7-ball', position, ballScale, false);
+      object.traverse(child => {
+        if (!child.material) return;
+        child.material.depthTest = false;
+        child.material.depthWrite = false;
+        child.material.transparent = true;
+        child.material.color.setHex(progress >= 1 ? 0xffd06a : 0xff7a00);
+        if (child.material.emissive) child.material.emissive.setHex(0xff7a00);
+        child.material.emissiveIntensity = 0.28 + clamp01(progress) * 1.1;
+        child.material.opacity = 0.72 + clamp01(progress) * 0.26;
+        child.renderOrder = 5;
+      });
+    }
+
+    if (id === 8 && state.target) {
+      const target = state.target;
+      const position = toWorld(target.x, target.y, target.z);
+      const dummyId = 'm8-dummy';
       this.createDummy(dummyId, 0xff7a00);
       // A fixed 1.80 m adult at every difficulty and distance. Put the head on
       // the mode's horizontal tracking line and let perspective alone control

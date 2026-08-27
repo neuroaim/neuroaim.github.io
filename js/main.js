@@ -84,7 +84,7 @@
         if (typeof TargetLockMode !== 'undefined') ModeRegistry.register(TargetLockMode);
         if (typeof PeripheralPopMode !== 'undefined') ModeRegistry.register(PeripheralPopMode);
         if (typeof CognitiveSwitchMode !== 'undefined') ModeRegistry.register(CognitiveSwitchMode);
-        if (typeof VerticalBarTrackingMode !== 'undefined') ModeRegistry.register(VerticalBarTrackingMode);
+        if (typeof DualStrafeBallTrackingMode !== 'undefined') ModeRegistry.register(DualStrafeBallTrackingMode);
     }
     
     // ===== UI INITIALIZATION =====
